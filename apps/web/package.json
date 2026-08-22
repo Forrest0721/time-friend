@@ -2,15 +2,17 @@
   "name": "@time-friend/web",
   "private": true,
   "version": "0.1.0",
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint app --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
-    "test": "npm run lint"
+    "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
+    "@time-friend/contracts": "workspace:*",
     "next": "16.2.6",
     "react": "19.2.6",
     "react-dom": "19.2.6"
@@ -20,7 +22,7 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.2.6"
+    "eslint-config-next": "16.2.6",
+    "vitest": "4.1.11"
   }
 }
-

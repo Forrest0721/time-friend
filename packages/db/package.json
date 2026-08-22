@@ -2,21 +2,33 @@
   "name": "@time-friend/db",
   "private": true,
   "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema/index.ts"
+  },
   "scripts": {
-    "generate": "drizzle-kit generate",
-    "migrate": "drizzle-kit migrate",
+    "generate": "drizzle-kit generate --config drizzle.config.ts",
+    "migrate": "tsx src/migrate.ts",
     "build": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
+    "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@testcontainers/postgresql": "12.1.0",
+    "@types/pg": "8.23.1",
     "drizzle-kit": "0.31.10",
-    "drizzle-orm": "0.43.1",
+    "testcontainers": "12.1.0",
+    "tsx": "4.20.3",
     "typescript": "5.9.3",
-    "eslint": "9.39.4"
+    "eslint": "9.39.4",
+    "vitest": "4.1.11"
   },
   "dependencies": {
-    "pg": "^8.14.0"
+    "@time-friend/domain": "workspace:*",
+    "drizzle-orm": "0.45.2",
+    "pg": "8.23.0",
+    "uuid": "14.0.2"
   }
 }
-

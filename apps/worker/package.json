@@ -2,19 +2,27 @@
   "name": "@time-friend/worker",
   "private": true,
   "version": "0.1.0",
+  "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc --noEmit",
     "start": "tsx src/index.ts",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
-    "test": "echo \"worker tests not configured\""
+    "test": "vitest run --config vitest.config.ts"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@time-friend/agent": "workspace:*",
+    "@time-friend/db": "workspace:*",
+    "@time-friend/domain": "workspace:*",
+    "@time-friend/queue": "workspace:*",
+    "uuid": "14.0.2"
+  },
   "devDependencies": {
     "typescript": "5.9.3",
     "tsx": "4.20.3",
-    "eslint": "9.39.4"
+    "eslint": "9.39.4",
+    "@types/node": "22.19.19",
+    "vitest": "4.1.11"
   }
 }
-

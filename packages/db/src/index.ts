@@ -1,13 +1,12 @@
-import { env } from "cloudflare:workers";
-import { drizzle } from "drizzle-orm/d1";
-import * as schema from "./schema";
-
-export function getDb() {
-  if (!env.DB) {
-    throw new Error(
-      "Cloudflare D1 binding `DB` is unavailable. Set the `d1` field in .openai/hosting.json to `DB` or let your control plane inject the real binding values before using the database."
-    );
-  }
-
-  return drizzle(env.DB, { schema });
-}
+export * from "./client.js";
+export * from "./idempotency.js";
+export * from "./migrations.js";
+export * from "./repositories/task-store.js";
+export * from "./repositories/execution-store.js";
+export * from "./repositories/account-privacy-store.js";
+export * from "./repositories/trajectory-store.js";
+export * from "./repositories/trajectory-review-store.js";
+export * from "./repositories/trajectory-schedule-store.js";
+export * from "./repositories/user-preference-store.js";
+export * from "./transaction-context.js";
+export * as schema from "./schema/index.js";

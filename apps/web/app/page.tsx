@@ -2,6 +2,9 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
+import { hasConfiguredApi } from "./api-client";
+import ConnectedApp from "./connected-app";
+
 type View = "today" | "lists" | "focus" | "trajectory";
 type Task = {
   id: number;
@@ -44,6 +47,10 @@ function formatClock(totalSeconds: number) {
 }
 
 export default function Home() {
+  return hasConfiguredApi ? <ConnectedApp /> : <DemoApp />;
+}
+
+function DemoApp() {
   const [view, setView] = useState<View>("today");
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [newTask, setNewTask] = useState("");
@@ -65,7 +72,10 @@ export default function Home() {
   useEffect(() => {
     const saved = window.localStorage.getItem("jianshi-prototype-tasks");
     if (saved) {
-      try { setTasks(JSON.parse(saved)); } catch { /* prototype fallback */ }
+      try {
+        const parsed = JSON.parse(saved) as Task[];
+        queueMicrotask(() => setTasks(parsed));
+      } catch { /* prototype fallback */ }
     }
   }, []);
 

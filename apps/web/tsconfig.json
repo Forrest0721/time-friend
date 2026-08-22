@@ -3,16 +3,13 @@
   "compilerOptions": {
     "lib": ["dom", "esnext"],
     "module": "esnext",
-    "jsx": "preserve",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
     "types": ["node", "react/experimental"],
     "strict": true,
     "baseUrl": ".",
-    "paths": {
-      "@time-friend/shared/*": ["../../packages/shared/src/*"]
-    },
     "plugins": [{ "name": "next" }]
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
   "exclude": ["node_modules"]
 }
-

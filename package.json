@@ -11,16 +11,32 @@
   "scripts": {
     "dev": "pnpm -r --parallel run dev",
     "build": "pnpm -r --parallel run build",
+    "site:build": "vite build",
     "test": "pnpm -r --parallel run test",
-    "lint": "pnpm -r --parallel run lint",
+    "lint": "eslint apps packages --ext .ts,.tsx",
     "typecheck": "pnpm -r --parallel run typecheck",
     "db:generate": "pnpm --filter @time-friend/db run generate",
+    "db:migrate": "pnpm --filter @time-friend/db run migrate",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
     "clean": "pnpm -r exec rm -rf .turbo dist .next && rm -rf node_modules"
   },
+  "dependencies": {
+    "next": "16.2.6",
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
+  },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "1.37.1",
+    "@vitejs/plugin-rsc": "0.5.26",
     "typescript": "5.9.3",
     "@types/node": "22.19.19",
     "eslint": "9.39.4",
-    "prettier": "3.5.3"
+    "prettier": "3.5.3",
+    "react-server-dom-webpack": "19.2.6",
+    "typescript-eslint": "8.67.0",
+    "vinext": "0.0.50",
+    "vite": "8.0.13",
+    "wrangler": "4.92.0"
   }
 }

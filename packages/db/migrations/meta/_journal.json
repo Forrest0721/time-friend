@@ -1,0 +1,76 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1787399671566,
+      "tag": "0000_optimal_raza",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1787400510192,
+      "tag": "0001_dry_saracen",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787401277555,
+      "tag": "0002_fearless_titania",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787402216730,
+      "tag": "0003_dusty_mach_iv",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787403254680,
+      "tag": "0004_amused_carmella_unuscione",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787403947737,
+      "tag": "0005_solid_starfox",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787404892531,
+      "tag": "0006_unique_zzzax",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787405322129,
+      "tag": "0007_vengeful_omega_flight",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787409579728,
+      "tag": "0008_gifted_spencer_smythe",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787410755114,
+      "tag": "0009_grey_iron_patriot",
+      "breakpoints": true
+    }
+  ]
+}

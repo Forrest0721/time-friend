@@ -1,5 +1,6 @@
 import vinext from "vinext";
 import { defineConfig } from "vite";
+import { resolve } from "node:path";
 import hostingConfig from "./.openai/hosting.json";
 import { sites } from "./build/sites-vite-plugin";
 
@@ -7,12 +8,14 @@ const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   "00000000-0000-4000-8000-000000000000";
 
 const { d1, r2 } = hostingConfig;
+const projectRoot = process.cwd();
+const applicationRoot = resolve(projectRoot, "apps/web");
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 
 const localBindingConfig = {
-  main: "./worker/index.ts",
+  main: resolve(projectRoot, "worker/index.ts"),
   compatibility_flags: ["nodejs_compat"],
   d1_databases: d1
     ? [
@@ -44,12 +47,19 @@ export default defineConfig(async () => {
   const { cloudflare } = await import("@cloudflare/vite-plugin");
 
   return {
+    root: applicationRoot,
+    publicDir: resolve(projectRoot, "public"),
+    build: { outDir: resolve(projectRoot, "dist") },
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }
       : undefined,
     plugins: [
-      vinext(),
-      sites(),
+      vinext({
+        appDir: applicationRoot,
+        rscOutDir: resolve(projectRoot, "dist/server"),
+        ssrOutDir: resolve(projectRoot, "dist/server/ssr"),
+      }),
+      sites(projectRoot, applicationRoot),
       cloudflare({
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
         config: localBindingConfig,

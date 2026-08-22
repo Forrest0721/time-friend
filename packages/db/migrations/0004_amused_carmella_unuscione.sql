@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "progress_entries_one_per_focus_session" ON "progress_entries" USING btree ("user_id","focus_session_id") WHERE "progress_entries"."focus_session_id" IS NOT NULL;
