@@ -1,0 +1,22 @@
+{
+  "name": "@time-friend/api",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc --noEmit",
+    "start": "node dist/index.js",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"api tests not configured\""
+  },
+  "dependencies": {
+    "fastify": "5.4.0"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "tsx": "4.20.3",
+    "eslint": "9.39.4"
+  }
+}
+

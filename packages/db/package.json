@@ -1,0 +1,22 @@
+{
+  "name": "@time-friend/db",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "generate": "drizzle-kit generate",
+    "migrate": "drizzle-kit migrate",
+    "build": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "drizzle-kit": "0.31.10",
+    "drizzle-orm": "0.43.1",
+    "typescript": "5.9.3",
+    "eslint": "9.39.4"
+  },
+  "dependencies": {
+    "pg": "^8.14.0"
+  }
+}
+

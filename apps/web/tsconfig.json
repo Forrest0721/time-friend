@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["dom", "esnext"],
+    "module": "esnext",
+    "jsx": "preserve",
+    "types": ["node", "react/experimental"],
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "@time-friend/shared/*": ["../../packages/shared/src/*"]
+    },
+    "plugins": [{ "name": "next" }]
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}
+

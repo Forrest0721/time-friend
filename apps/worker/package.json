@@ -1,0 +1,20 @@
+{
+  "name": "@time-friend/worker",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc --noEmit",
+    "start": "tsx src/index.ts",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"worker tests not configured\""
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "tsx": "4.20.3",
+    "eslint": "9.39.4"
+  }
+}
+
