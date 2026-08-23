@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.15.3 --activate
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install browser runtime
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Lint
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Unit and integration tests
+        run: pnpm run test:unit
+      - name: Browser tests
+        run: pnpm run test:e2e
+      - name: Build applications
+        run: pnpm build
+      - name: Build Sites artifact
+        run: pnpm site:build
+
+  container:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        app:
+          - '@time-friend/web'
+          - '@time-friend/api'
+          - '@time-friend/worker'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build ${{ matrix.app }} image
+        run: docker build --build-arg APP_PACKAGE=${{ matrix.app }} --tag time-friend:${{ strategy.job-index }} .

@@ -92,6 +92,15 @@ export const agentRunSchema = z.strictObject({
   inputTokens: z.int().nonnegative().nullable(),
   outputTokens: z.int().nonnegative().nullable(),
   durationMs: z.int().nonnegative().nullable(),
+  toolCalls: z.array(z.strictObject({
+    name: z.string().min(1),
+    status: z.enum(["succeeded", "failed"]),
+    durationMs: z.int().nonnegative(),
+    inputHash: z.string().regex(/^[a-f0-9]{64}$/),
+    outputHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+    errorCode: z.string().nullable(),
+  })).optional(),
+  estimatedCostMicrousd: z.int().nonnegative().nullable().optional(),
   attempts: z.int().nonnegative(),
   errorCode: z.string().nullable(),
   startedAt: isoDateTimeSchema.nullable(),
@@ -110,6 +119,13 @@ export const evidenceRefSchema = z.strictObject({
   excerpt: z.string().nullable(),
   excludedAt: isoDateTimeSchema.nullable(),
   exclusionReason: z.string().nullable(),
+  detail: z.strictObject({
+    title: z.string().min(1),
+    occurredAt: isoDateTimeSchema,
+    taskId: uuidSchema.nullable(),
+    listId: uuidSchema.nullable(),
+    metrics: z.record(z.string(), z.unknown()),
+  }).nullable().optional(),
 });
 
 export const evidenceIdParamsSchema = z.strictObject({ evidenceId: uuidSchema });
@@ -137,6 +153,7 @@ export const reviewClaimSchema = z.strictObject({
   confidence: z.enum(["low", "medium", "high"]),
   status: z.enum(["pending", "accepted", "edited", "rejected"]),
   userRevision: z.string().nullable(),
+  correctionKind: z.enum(["accurate", "direction_name", "wrong_association", "maintenance", "exploration", "exclude_category", "wrong"]).nullable().optional(),
   position: z.int().nonnegative(),
   proposedDirection: z
     .strictObject({
@@ -216,6 +233,16 @@ export const editReviewClaimBodySchema = z.strictObject({
   memoryValue: memoryValueSchema.optional(),
 });
 export const rejectReviewClaimBodySchema = z.strictObject({});
+export const claimCorrectionKindSchema = z.enum(["accurate", "direction_name", "wrong_association", "maintenance", "exploration", "exclude_category", "wrong"]);
+export const correctReviewClaimBodySchema = z.strictObject({
+  kind: claimCorrectionKindSchema,
+  detail: z.string().trim().max(2_000).optional(),
+  remember: z.boolean().optional(),
+});
+export const claimCorrectionResultSchema = z.strictObject({
+  review: weeklyReviewViewSchema,
+  futureEffect: z.string().min(1).max(2_000),
+});
 export const confirmReviewBodySchema = z.strictObject({});
 
 export const confirmedMemorySchema = z.strictObject({
@@ -230,6 +257,8 @@ export const confirmedMemorySchema = z.strictObject({
   status: z.enum(["active", "superseded", "deleted"]),
   revision: z.int().positive(),
   supersedesId: uuidSchema.nullable(),
+  reviewRequiredAt: isoDateTimeSchema.nullable().optional(),
+  reviewRequiredReason: z.string().nullable().optional(),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
 });
@@ -274,6 +303,7 @@ export const updateCommitmentBodySchema = z
   })
   .refine((value) => value.title !== undefined || value.reason !== undefined, "至少修改一个字段");
 export const commitmentCommandBodySchema = z.strictObject({ expectedRevision: z.int().positive() });
+export const commitmentPageSchema = z.strictObject({ items: z.array(commitmentSchema) });
 
 export type PeriodFactsDto = z.infer<typeof periodFactsSchema>;
 export type PeriodSnapshotDto = z.infer<typeof periodSnapshotSchema>;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { AgentRunRecord, WeeklyReviewView } from "./trajectory-generation.js";
-import { isDirectionTransitionAllowed, planReviewConfirmation } from "./trajectory-feedback.js";
+import { isDirectionTransitionAllowed, normalizeClaimCorrection, planReviewConfirmation } from "./trajectory-feedback.js";
 
 describe("planReviewConfirmation", () => {
   it("requires every Agent claim to be explicitly handled", () => {
@@ -51,6 +51,29 @@ describe("direction lifecycle", () => {
     expect(isDirectionTransitionAllowed("active", "ended")).toBe(true);
     expect(isDirectionTransitionAllowed("ended", "active")).toBe(false);
     expect(isDirectionTransitionAllowed("replaced", "paused")).toBe(false);
+  });
+});
+
+describe("structured claim corrections", () => {
+  it("turns maintenance and exploration into explicit reusable classifications", () => {
+    expect(normalizeClaimCorrection("maintenance", "例行周报", false)).toMatchObject({
+      decision: { action: "edit", correctionKind: "maintenance", remember: true, memoryType: "classification", memoryValue: { classification: "maintenance" } },
+    });
+    expect(normalizeClaimCorrection("exploration", "", false)).toMatchObject({
+      decision: { action: "edit", correctionKind: "exploration", remember: true, memoryType: "classification", memoryValue: { classification: "exploration" } },
+    });
+  });
+
+  it("requires concrete detail for renamed directions, wrong associations and category exclusions", () => {
+    expect(() => normalizeClaimCorrection("direction_name", "", true)).toThrow("请补充这次校正的具体内容");
+    expect(normalizeClaimCorrection("direction_name", "见时产品验证", false)).toMatchObject({
+      decision: { userRevision: "见时产品验证", memoryType: "direction", remember: true },
+      futureEffect: expect.stringContaining("见时产品验证"),
+    });
+    expect(normalizeClaimCorrection("wrong", "", true)).toEqual({
+      decision: { action: "reject", correctionKind: "wrong" },
+      futureEffect: "本次判断会被否定，不形成方向或长期记忆。",
+    });
   });
 });
 

@@ -6,8 +6,11 @@ import {
   apiProblemSchema,
   commitmentCommandBodySchema,
   commitmentIdParamsSchema,
+  commitmentPageSchema,
   commitmentSchema,
   confirmReviewBodySchema,
+  correctReviewClaimBodySchema,
+  claimCorrectionResultSchema,
   confirmedMemorySchema,
   createCommitmentBodySchema,
   directionIdParamsSchema,
@@ -35,6 +38,7 @@ import {
 
 import { toPublicWeeklyReview } from "../trajectory-mappers.js";
 import type { ApiDependencies } from "../types.js";
+import { recordProductEvent } from "@time-friend/observability";
 import { mutate, requireUser } from "./helpers.js";
 
 const errorResponses = {
@@ -47,6 +51,40 @@ const errorResponses = {
 
 export function registerTrajectoryFeedbackRoutes(instance: FastifyInstance, dependencies: ApiDependencies): void {
   const app = instance.withTypeProvider<ZodTypeProvider>();
+
+  app.get(
+    "/api/v1/commitments/current",
+    { schema: { response: { 200: commitmentPageSchema, ...errorResponses } } },
+    async (request) => ({ items: await dependencies.trajectoryFeedback.listCurrentCommitments(requireUser(request).id) }),
+  );
+
+  app.post(
+    "/api/v1/review-claims/:claimId/correct",
+    {
+      schema: {
+        headers: idempotencyHeadersSchema,
+        params: reviewClaimIdParamsSchema,
+        body: correctReviewClaimBodySchema,
+        response: { 200: claimCorrectionResultSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) => {
+      const user = requireUser(request);
+      const result = await mutate(
+        dependencies,
+        request,
+        user.id,
+        "POST /review-claims/:claimId/correct",
+        { params: request.params, body: request.body },
+        async () => {
+          const corrected = await dependencies.trajectoryFeedback.correctClaim(user.id, request.params.claimId, request.body);
+          recordProductEvent("claim_corrected", { kind: request.body.kind });
+          return { statusCode: 200, body: { review: toPublicWeeklyReview(corrected.review), futureEffect: corrected.futureEffect } };
+        },
+      );
+      return reply.status(result.statusCode).send(result.body);
+    },
+  );
 
   app.post(
     "/api/v1/review-claims/:claimId/accept",

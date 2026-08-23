@@ -1,14 +1,15 @@
 import { tool, type Tool } from "@openai/agents";
 import { z } from "zod";
 
-import type { GeneratedReview, GenerateWeeklyReviewInput } from "@time-friend/domain";
+import { hashCanonical, type AgentToolCallAudit, type GeneratedReview, type GenerateWeeklyReviewInput } from "@time-friend/domain";
+import { recordDuration, recordFailure, recordProductEvent } from "@time-friend/observability";
 
 import { weeklyReviewOutputSchema } from "./schema.js";
 
 const entityTypeSchema = z.enum(["task", "focus_session", "progress_entry", "task_event", "memory"]);
 const relationSchema = z.enum(["direct", "support", "maintenance", "exploration", "unrelated"]);
 
-export function createTrajectoryTools(input: GenerateWeeklyReviewInput): Tool[] {
+export function createTrajectoryTools(input: GenerateWeeklyReviewInput, audit: AgentToolCallAudit[] = [], now: () => number = Date.now): Tool[] {
   return [
     tool({
       name: "get_period_snapshot",
@@ -19,8 +20,10 @@ export function createTrajectoryTools(input: GenerateWeeklyReviewInput): Tool[] 
       timeoutBehavior: "raise_exception",
       errorFunction: null,
       async execute({ snapshotId }) {
-        assertCurrentSnapshot(snapshotId, input);
-        return input.tools.getPeriodSnapshot();
+        return auditTool("get_period_snapshot", { snapshotId }, audit, now, async () => {
+          assertCurrentSnapshot(snapshotId, input);
+          return input.tools.getPeriodSnapshot();
+        });
       },
     }),
     tool({
@@ -36,7 +39,7 @@ export function createTrajectoryTools(input: GenerateWeeklyReviewInput): Tool[] 
       timeoutBehavior: "raise_exception",
       errorFunction: null,
       async execute(parameters) {
-        return input.tools.searchEvidence(parameters);
+        return auditTool("search_evidence", parameters, audit, now, () => input.tools.searchEvidence(parameters));
       },
     }),
     tool({
@@ -48,7 +51,7 @@ export function createTrajectoryTools(input: GenerateWeeklyReviewInput): Tool[] 
       timeoutBehavior: "raise_exception",
       errorFunction: null,
       async execute() {
-        return input.tools.getConfirmedMemories();
+        return auditTool("get_confirmed_memories", {}, audit, now, () => input.tools.getConfirmedMemories());
       },
     }),
     tool({
@@ -60,7 +63,7 @@ export function createTrajectoryTools(input: GenerateWeeklyReviewInput): Tool[] 
       timeoutBehavior: "raise_exception",
       errorFunction: null,
       async execute() {
-        return input.tools.comparePeriods();
+        return auditTool("compare_periods", {}, audit, now, () => input.tools.comparePeriods());
       },
     }),
     tool({
@@ -76,7 +79,7 @@ export function createTrajectoryTools(input: GenerateWeeklyReviewInput): Tool[] 
       timeoutBehavior: "raise_exception",
       errorFunction: null,
       async execute(parameters) {
-        return input.tools.proposeContributionEdges(parameters);
+        return auditTool("propose_contribution_edges", parameters, audit, now, () => input.tools.proposeContributionEdges(parameters));
       },
     }),
     tool({
@@ -88,10 +91,53 @@ export function createTrajectoryTools(input: GenerateWeeklyReviewInput): Tool[] 
       timeoutBehavior: "raise_exception",
       errorFunction: null,
       async execute({ review }) {
-        return input.tools.validateReviewEvidence(review as GeneratedReview);
+        return auditTool("validate_review_evidence", { review }, audit, now, () => input.tools.validateReviewEvidence(review as GeneratedReview));
       },
     }),
   ];
+}
+
+async function auditTool<T>(
+  name: string,
+  parameters: unknown,
+  audit: AgentToolCallAudit[],
+  now: () => number,
+  work: () => Promise<T>,
+): Promise<T> {
+  const startedAt = now();
+  try {
+    const output = await work();
+    const durationMs = Math.max(0, now() - startedAt);
+    audit.push({
+      name,
+      status: "succeeded",
+      durationMs,
+      inputHash: hashCanonical(parameters),
+      outputHash: hashCanonical(output),
+      errorCode: null,
+    });
+    recordDuration("agent.tool", durationMs, { tool: name, status: "succeeded" });
+    recordProductEvent("agent_tool_call", { tool: name, status: "succeeded" });
+    return output;
+  } catch (error) {
+    const durationMs = Math.max(0, now() - startedAt);
+    audit.push({
+      name,
+      status: "failed",
+      durationMs,
+      inputHash: hashCanonical(parameters),
+      outputHash: null,
+      errorCode: toolErrorCode(error),
+    });
+    recordDuration("agent.tool", durationMs, { tool: name, status: "failed" });
+    recordFailure("agent.tool", { tool: name, errorCode: toolErrorCode(error) });
+    throw error;
+  }
+}
+
+function toolErrorCode(error: unknown): string {
+  const message = error instanceof Error ? error.message : "TOOL_CALL_FAILED";
+  return /^[A-Z][A-Z0-9_]{2,100}$/.test(message) ? message : "TOOL_CALL_FAILED";
 }
 
 function assertCurrentSnapshot(snapshotId: string, input: GenerateWeeklyReviewInput): void {

@@ -20,7 +20,9 @@ Agent 使用 OpenAI Agents SDK，但只有只读工具。事实由确定性代�
 - `packages/db`：Drizzle PostgreSQL schema、migration 和 repository
 - `packages/queue`：事务内队列生产者与 Worker 注册
 - `packages/agent`：OpenAI Agents SDK 适配器与只读工具
-- `work`：产品调研、PRD 与技术方案
+- `packages/observability`：OpenTelemetry traces/metrics 与可选 Sentry
+- `tests/e2e`：Playwright 核心闭环与故障降级验收
+- `work`：产品调研、PRD、技术方案、实现验收矩阵与 ADR
 
 ## 本地启动
 
@@ -34,19 +36,30 @@ Agent 使用 OpenAI Agents SDK，但只有只读工具。事实由确定性代�
 
 Web 默认运行在 `http://localhost:3000`，API 默认运行在 `http://localhost:4000`。若 Web 未配置 `NEXT_PUBLIC_API_URL`，页面会进入不依赖后端的交互演示模式；配置后会启用真实注册登录和完整数据闭环。
 
+`OTEL_EXPORTER_OTLP_ENDPOINT` 填 OTLP/HTTP 基础地址（例如 `http://localhost:4318`），API 与 Worker 会分别发送到 `/v1/traces` 和 `/v1/metrics`。设置 `SENTRY_DSN` 可启用无默认 PII 的异常上报。Worker 同时设置两项 `TRAJECTORY_*_USD_PER_MILLION_TOKENS` 后，会保存每次周轨迹的估算成本。
+
 ## 质量检查
 
-- `pnpm typecheck`
-- `pnpm test`
 - `pnpm lint`
+- `pnpm typecheck`
+- `pnpm run test:unit`（含真实 PostgreSQL 与 pg-boss 集成测试）
+- `pnpm exec playwright install chromium`（首次准备浏览器运行时）
+- `pnpm run test:e2e`
+- `pnpm test`（一次运行全部测试）
 - `pnpm build`
 - `pnpm site:build`（生成 Codex Sites 发布产物）
 
 数据库与队列集成测试使用 Testcontainers 启动真实 PostgreSQL，需保证 Docker 可用。
 
+## 容器构建
+
+同一个根 `Dockerfile` 通过 `APP_PACKAGE` 构建三个独立镜像，例如：`docker build --build-arg APP_PACKAGE=@time-friend/api -t time-friend-api .`。Web、API 与 Worker 使用同一提交和锁文件；运行 API/Worker 时按各自 `.env.example` 注入环境变量。
+
 ## 设计文档
 
 - [V1 PRD](work/PRD-v1-minimum-loop.md)
 - [V1 技术方案](work/technical-design-v1.md)
+- [V1 实现验收矩阵](work/implementation-audit-v1.md)
+- [架构决策记录](work/adr)
 - [滴答清单产品拆解](work/dida-product-teardown.md)
 - [产品调研](work/product-research-v0.md)

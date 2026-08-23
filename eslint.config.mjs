@@ -12,7 +12,7 @@ function scopeToWeb(configs) {
 const eslintConfig = defineConfig([
   ...tseslint.configs.recommended.map((config) => ({
     ...config,
-    files: ["apps/**/*.{ts,tsx}", "packages/**/*.{ts,tsx}"],
+    files: ["apps/**/*.{ts,tsx}", "packages/**/*.{ts,tsx}", "tests/**/*.{ts,tsx}", "playwright.config.ts"],
   })),
   ...scopeToWeb(nextVitals),
   ...scopeToWeb(nextTs),

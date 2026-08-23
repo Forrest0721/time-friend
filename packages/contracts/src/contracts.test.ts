@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  adjustFocusBoundariesBodySchema,
   createFocusBodySchema,
   createItemBodySchema,
   focusFeedbackBodySchema,
@@ -65,5 +66,20 @@ describe("task API contracts", () => {
       outcome: null,
       completeTask: false,
     });
+  });
+
+  it("compares corrected focus boundaries as instants rather than offset strings", () => {
+    expect(adjustFocusBoundariesBodySchema.parse({
+      startedAt: "2026-08-23T10:00:00+08:00",
+      endedAt: "2026-08-23T03:00:00Z",
+      reason: "统一时区后核对",
+      expectedRevision: 1,
+    })).toMatchObject({ reason: "统一时区后核对" });
+    expect(() => adjustFocusBoundariesBodySchema.parse({
+      startedAt: "2026-08-23T04:00:00Z",
+      endedAt: "2026-08-23T10:00:00+08:00",
+      reason: "时间倒置",
+      expectedRevision: 1,
+    })).toThrow();
   });
 });

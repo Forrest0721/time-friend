@@ -1,0 +1,1 @@
+ALTER TABLE "review_claims" ADD CONSTRAINT "review_claims_correction_kind_valid" CHECK ("review_claims"."correction_kind" IS NULL OR "review_claims"."correction_kind" IN ('accurate', 'direction_name', 'wrong_association', 'maintenance', 'exploration', 'exclude_category', 'wrong'));

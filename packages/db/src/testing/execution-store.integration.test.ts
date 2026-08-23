@@ -153,7 +153,46 @@ describe("PostgresExecutionStore", () => {
     const [segment] = await client.db.select().from(focusSegments).where(sql`${focusSegments.sessionId} = ${started.session.id}`);
     const [adjustment] = await client.db.select().from(focusAdjustments).where(sql`${focusAdjustments.sessionId} = ${started.session.id}`);
     expect(segment?.endedAt).toEqual(new Date("2026-08-22T08:10:00.000Z"));
-    expect(adjustment).toMatchObject({ beforeSeconds: 600, afterSeconds: 540, reason: "忘记暂停" });
+    expect(adjustment).toMatchObject({ kind: "duration", beforeSeconds: 600, afterSeconds: 540, reason: "忘记暂停" });
+  });
+
+  it("persists boundary corrections and deferred feedback as one auditable result", async () => {
+    const task = await createTask("补记反馈与边界修正");
+    const started = await execution.startFocus(USER_A, { taskId: task.id, mode: "stopwatch" });
+    now = new Date("2026-08-22T08:10:00.000Z");
+    await execution.finishFocus(USER_A, started.session.id, 1);
+    await execution.submitFocusFeedback(USER_A, started.session.id, { outcome: null, expectedRevision: 2 });
+
+    const corrected = await execution.adjustFocusBoundaries(USER_A, started.session.id, {
+      startedAt: "2026-08-22T08:01:00.000Z",
+      endedAt: "2026-08-22T08:09:00.000Z",
+      reason: "根据实际工作记录修正",
+      expectedRevision: 3,
+    });
+    expect(corrected).toMatchObject({ baseActiveSeconds: 480, effectiveSeconds: 480, revision: 4 });
+
+    const supplemented = await execution.addDeferredFocusFeedback(USER_A, started.session.id, {
+      outcome: "progressed",
+      note: "稍后补充的推进",
+      expectedRevision: 4,
+    });
+    expect(supplemented).toMatchObject({ session: { revision: 5 }, progress: { outcome: "progressed" } });
+    await expect(
+      execution.addDeferredFocusFeedback(USER_A, started.session.id, { outcome: "blocked", expectedRevision: 5 }),
+    ).rejects.toMatchObject({ code: "FOCUS_FEEDBACK_EXISTS" });
+
+    const [segment] = await client.db.select().from(focusSegments).where(sql`${focusSegments.sessionId} = ${started.session.id}`);
+    const [adjustment] = await client.db.select().from(focusAdjustments).where(sql`${focusAdjustments.sessionId} = ${started.session.id}`);
+    expect(segment).toMatchObject({
+      startedAt: new Date("2026-08-22T08:01:00.000Z"),
+      endedAt: new Date("2026-08-22T08:09:00.000Z"),
+    });
+    expect(adjustment).toMatchObject({
+      kind: "boundaries",
+      beforeStartedAt: new Date("2026-08-22T08:00:00.000Z"),
+      afterEndedAt: new Date("2026-08-22T08:09:00.000Z"),
+    });
+    expect(await client.db.select().from(progressEntries).where(sql`${progressEntries.focusSessionId} = ${started.session.id}`)).toHaveLength(1);
   });
 
   it("keeps tenant scope on task links and progress reads", async () => {

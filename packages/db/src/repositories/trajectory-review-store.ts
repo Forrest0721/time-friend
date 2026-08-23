@@ -39,6 +39,7 @@ import type { IdGenerator } from "@time-friend/domain";
 import type { TimeFriendDatabase } from "../client.js";
 import {
   agentRuns,
+  confirmedMemoryEvidenceDependencies,
   confirmedMemories,
   contributionEdges,
   directions,
@@ -223,6 +224,8 @@ export class PostgresTrajectoryReviewStore implements TrajectoryReviewStore, Tra
           inputTokens: result.usage.inputTokens,
           outputTokens: result.usage.outputTokens,
           durationMs: result.durationMs,
+          toolCallsJson: result.toolCalls ?? [],
+          estimatedCostMicrousd: result.estimatedCostMicrousd ?? null,
           updatedAt: new Date(now),
         })
         .where(and(eq(agentRuns.id, runId), eq(agentRuns.status, "running")))
@@ -309,7 +312,7 @@ export class PostgresTrajectoryReviewStore implements TrajectoryReviewStore, Tra
     return views;
   }
 
-  decideClaim(userId: string, claimId: string, decision: ClaimDecision): Promise<WeeklyReviewView> {
+  decideClaim(userId: string, claimId: string, decision: ClaimDecision, now: string, ids: IdGenerator): Promise<WeeklyReviewView> {
     return this.transactions.run(this.database, async (transaction) => {
       const [claim] = await transaction
         .select()
@@ -333,6 +336,7 @@ export class PostgresTrajectoryReviewStore implements TrajectoryReviewStore, Tra
         .set({
           status: decision.action === "accept" ? "accepted" : decision.action === "edit" ? "edited" : "rejected",
           userRevision: decision.action === "edit" ? decision.userRevision : null,
+          correctionKind: decision.correctionKind ?? null,
         })
         .where(eq(reviewClaims.id, claim.id));
       const [candidate] = await transaction
@@ -346,9 +350,24 @@ export class PostgresTrajectoryReviewStore implements TrajectoryReviewStore, Tra
           .update(memoryCandidates)
           .set({
             status: remember ? "pending" : "rejected",
+            ...(remember && decision.memoryType ? { memoryType: decision.memoryType } : {}),
             ...(remember && decision.memoryValue ? { proposedValueJson: decision.memoryValue } : {}),
           })
           .where(eq(memoryCandidates.id, candidate.id));
+      } else if (decision.action !== "reject" && decision.remember) {
+        await transaction.insert(memoryCandidates).values({
+          id: ids.next(),
+          userId,
+          reviewClaimId: claim.id,
+          memoryType: decision.memoryType ?? "preference",
+          proposedValueJson: decision.memoryValue ?? {
+            correction: decision.correctionKind ?? "accepted",
+            statement: claim.statement,
+            rationale: claim.rationale,
+          },
+          status: "pending",
+          createdAt: new Date(now),
+        });
       }
       const updatedClaims = await transaction
         .select()
@@ -462,6 +481,16 @@ export class PostgresTrajectoryReviewStore implements TrajectoryReviewStore, Tra
       }
       if (plan.memories.length > 0) {
         await transaction.insert(confirmedMemories).values(plan.memories.map(memoryToRow));
+      }
+      if (plan.memoryDependencies.length > 0) {
+        await transaction.insert(confirmedMemoryEvidenceDependencies).values(plan.memoryDependencies.map((dependency) => ({
+          id: ids.next(),
+          userId,
+          memoryId: dependency.memoryId,
+          entityType: dependency.entityType,
+          entityId: dependency.entityId,
+          createdAt: new Date(now),
+        })));
       }
       if (plan.contributionEdges.length > 0) {
         await transaction.insert(contributionEdges).values(
@@ -613,10 +642,30 @@ export class PostgresTrajectoryReviewStore implements TrajectoryReviewStore, Tra
         status: "active",
         revision: current.revision + 1,
         supersedesId: current.id,
+        reviewRequiredAt: null,
+        reviewRequiredReason: null,
         createdAt: now,
         updatedAt: now,
       };
       const [inserted] = await transaction.insert(confirmedMemories).values(memoryToRow(replacement)).returning();
+      const dependencies = await transaction
+        .select()
+        .from(confirmedMemoryEvidenceDependencies)
+        .where(and(
+          eq(confirmedMemoryEvidenceDependencies.userId, userId),
+          eq(confirmedMemoryEvidenceDependencies.memoryId, current.id),
+        ));
+      if (dependencies.length > 0) {
+        await transaction.insert(confirmedMemoryEvidenceDependencies).values(dependencies.map((dependency) => ({
+          id: ids.next(),
+          userId,
+          memoryId: inserted!.id,
+          entityType: dependency.entityType,
+          entityId: dependency.entityId,
+          invalidatedAt: null,
+          createdAt: new Date(now),
+        })));
+      }
       return toMemory(inserted!);
     });
   }
@@ -665,6 +714,23 @@ export class PostgresTrajectoryReviewStore implements TrajectoryReviewStore, Tra
         .for("update")
         .limit(1);
       if (!review) throw new DomainError("RESOURCE_NOT_FOUND", "轨迹复盘不存在");
+      const [targetPeriod] = await transaction
+        .select({ id: periods.id })
+        .from(periods)
+        .where(and(eq(periods.userId, userId), eq(periods.id, targetPeriodId)))
+        .for("update")
+        .limit(1);
+      if (!targetPeriod) throw new DomainError("RESOURCE_NOT_FOUND", "目标周期不存在");
+      const active = await transaction
+        .select({ id: nextPeriodCommitments.id })
+        .from(nextPeriodCommitments)
+        .where(and(
+          eq(nextPeriodCommitments.userId, userId),
+          eq(nextPeriodCommitments.targetPeriodId, targetPeriodId),
+          inArray(nextPeriodCommitments.status, ["proposed", "confirmed", "paused"]),
+        ))
+        .limit(3);
+      if (active.length >= 3) throw new DomainError("INVALID_RELATION", "每周最多保留 3 个重点");
       const positions = await transaction
         .select({ position: nextPeriodCommitments.position })
         .from(nextPeriodCommitments)
@@ -714,6 +780,28 @@ export class PostgresTrajectoryReviewStore implements TrajectoryReviewStore, Tra
       if (patch.status && !isCommitmentTransitionAllowed(current.status, patch.status)) {
         throw new DomainError("INVALID_RELATION", "下周重点状态转换不合法");
       }
+      if (patch.status === "confirmed") {
+        const targetPeriodId = patch.targetPeriodId ?? current.targetPeriodId;
+        if (!targetPeriodId) throw new DomainError("INVALID_RELATION", "确认重点前需要确定目标周期");
+        const [targetPeriod] = await transaction
+          .select({ id: periods.id })
+          .from(periods)
+          .where(and(eq(periods.userId, userId), eq(periods.id, targetPeriodId)))
+          .for("update")
+          .limit(1);
+        if (!targetPeriod) throw new DomainError("RESOURCE_NOT_FOUND", "目标周期不存在");
+        const active = await transaction
+          .select({ id: nextPeriodCommitments.id })
+          .from(nextPeriodCommitments)
+          .where(and(
+            eq(nextPeriodCommitments.userId, userId),
+            eq(nextPeriodCommitments.targetPeriodId, targetPeriodId),
+            inArray(nextPeriodCommitments.status, ["confirmed", "paused"]),
+            ne(nextPeriodCommitments.id, current.id),
+          ))
+          .limit(3);
+        if (active.length >= 3) throw new DomainError("INVALID_RELATION", "每周最多确认 3 个重点");
+      }
       const [updated] = await transaction
         .update(nextPeriodCommitments)
         .set({ ...patch, revision: current.revision + 1, updatedAt: new Date(now) })
@@ -731,6 +819,19 @@ export class PostgresTrajectoryReviewStore implements TrajectoryReviewStore, Tra
       .where(and(eq(reviewVersions.userId, userId), eq(reviewVersions.id, reviewId)))
       .limit(1);
     return row?.endsAt.toISOString() ?? null;
+  }
+
+  async listCommitmentsForPeriod(userId: string, periodId: string): Promise<CommitmentRecord[]> {
+    const rows = await this.database
+      .select()
+      .from(nextPeriodCommitments)
+      .where(and(
+        eq(nextPeriodCommitments.userId, userId),
+        eq(nextPeriodCommitments.targetPeriodId, periodId),
+        inArray(nextPeriodCommitments.status, ["confirmed", "paused"]),
+      ))
+      .orderBy(nextPeriodCommitments.position, nextPeriodCommitments.createdAt);
+    return rows.map(toCommitment);
   }
 
   async getCommitmentSourcePeriodEnd(userId: string, commitmentId: string): Promise<string | null> {
@@ -939,6 +1040,8 @@ function agentRunToRow(run: AgentRunRecord): typeof agentRuns.$inferInsert {
     inputTokens: run.inputTokens,
     outputTokens: run.outputTokens,
     durationMs: run.durationMs,
+    toolCallsJson: run.toolCalls ?? [],
+    estimatedCostMicrousd: run.estimatedCostMicrousd ?? null,
     attempts: run.attempts,
     errorCode: run.errorCode,
     errorDetailRedacted: run.errorDetailRedacted,
@@ -976,6 +1079,8 @@ function toAgentRun(row: AgentRunRow): AgentRunRecord {
     inputTokens: row.inputTokens,
     outputTokens: row.outputTokens,
     durationMs: row.durationMs,
+    toolCalls: row.toolCallsJson,
+    estimatedCostMicrousd: row.estimatedCostMicrousd,
     attempts: row.attempts,
     errorCode: row.errorCode,
     errorDetailRedacted: row.errorDetailRedacted,
@@ -1030,6 +1135,18 @@ async function loadViewByRun(
   const evidenceRows = claimIds.length
     ? await database.select().from(evidenceRefs).where(and(eq(evidenceRefs.userId, userId), inArray(evidenceRefs.claimId, claimIds)))
     : [];
+  const documentEvidenceIds = evidenceRows.filter((entry) => entry.entityType !== "memory").map((entry) => entry.entityId);
+  const evidenceDocuments = documentEvidenceIds.length
+    ? await database
+        .select()
+        .from(snapshotEvidence)
+        .where(and(
+          eq(snapshotEvidence.userId, userId),
+          eq(snapshotEvidence.snapshotId, reviewRow.snapshotId),
+          inArray(snapshotEvidence.entityId, documentEvidenceIds),
+        ))
+    : [];
+  const documentByEntity = new Map(evidenceDocuments.map((entry) => [`${entry.entityType}:${entry.entityId}`, entry]));
   const candidateRows = claimIds.length
     ? await database.select().from(memoryCandidates).where(and(eq(memoryCandidates.userId, userId), inArray(memoryCandidates.reviewClaimId, claimIds)))
     : [];
@@ -1043,7 +1160,9 @@ async function loadViewByRun(
     review: toReview(reviewRow),
     claims: claimRows.map((row) => ({
       ...toClaim(row),
-      evidence: evidenceRows.filter((entry) => entry.claimId === row.id).map(toEvidence),
+      evidence: evidenceRows
+        .filter((entry) => entry.claimId === row.id)
+        .map((entry) => toEvidence(entry, documentByEntity.get(`${entry.entityType}:${entry.entityId}`))),
       memoryCandidate: candidateRows.find((entry) => entry.reviewClaimId === row.id) ? toCandidate(candidateRows.find((entry) => entry.reviewClaimId === row.id)!) : null,
     })),
     commitments: commitmentRows.map(toCommitment),
@@ -1088,11 +1207,12 @@ function toClaim(row: ClaimRow): ReviewClaimRecord {
     confidence: row.confidence,
     status: row.status,
     userRevision: row.userRevision,
+    correctionKind: row.correctionKind as ReviewClaimRecord["correctionKind"],
     position: row.position,
     proposedDirection: row.proposedDirectionJson as ReviewClaimRecord["proposedDirection"],
   };
 }
-function toEvidence(row: EvidenceRow): EvidenceRefRecord {
+function toEvidence(row: EvidenceRow, document?: typeof snapshotEvidence.$inferSelect): EvidenceRefRecord {
   return {
     id: row.id,
     userId: row.userId,
@@ -1103,6 +1223,13 @@ function toEvidence(row: EvidenceRow): EvidenceRefRecord {
     excerpt: row.excerpt,
     excludedAt: isoOrNull(row.excludedAt),
     exclusionReason: row.exclusionReason,
+    detail: document ? {
+      title: document.title,
+      occurredAt: document.occurredAt.toISOString(),
+      taskId: document.taskId,
+      listId: document.listId,
+      metrics: document.metricsJson,
+    } : null,
   };
 }
 function toCandidate(row: CandidateRow): MemoryCandidateRecord {
@@ -1133,6 +1260,8 @@ function memoryToRow(memory: ConfirmedMemoryRecord): typeof confirmedMemories.$i
     status: memory.status,
     revision: memory.revision,
     supersedesId: memory.supersedesId,
+    reviewRequiredAt: memory.reviewRequiredAt ? new Date(memory.reviewRequiredAt) : null,
+    reviewRequiredReason: memory.reviewRequiredReason ?? null,
     createdAt: new Date(memory.createdAt),
     updatedAt: new Date(memory.updatedAt),
   };
@@ -1151,6 +1280,8 @@ function toMemory(row: MemoryRow): ConfirmedMemoryRecord {
     status: row.status,
     revision: row.revision,
     supersedesId: row.supersedesId,
+    reviewRequiredAt: isoOrNull(row.reviewRequiredAt),
+    reviewRequiredReason: row.reviewRequiredReason,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

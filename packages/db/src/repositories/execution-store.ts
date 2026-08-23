@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNull, lt, SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lt, SQL } from "drizzle-orm";
 
 import {
   DomainError,
@@ -112,6 +112,17 @@ export class PostgresExecutionStoreTransaction implements ExecutionStoreTransact
     return row ? toFocusSegment(row) : null;
   }
 
+  async listFocusSegments(userId: string, sessionId: string, lock = false): Promise<FocusSegment[]> {
+    let query = this.database
+      .select()
+      .from(focusSegments)
+      .where(and(eq(focusSegments.userId, userId), eq(focusSegments.sessionId, sessionId)))
+      .orderBy(asc(focusSegments.startedAt), asc(focusSegments.id))
+      .$dynamic();
+    if (lock) query = query.for("update");
+    return (await query).map(toFocusSegment);
+  }
+
   async insertFocusSegment(segment: FocusSegment): Promise<void> {
     await this.database.insert(focusSegments).values(focusSegmentToRow(segment));
   }
@@ -132,9 +143,32 @@ export class PostgresExecutionStoreTransaction implements ExecutionStoreTransact
     if (updated.length !== 1) throw new DomainError("REVISION_CONFLICT", "专注时间段已被关闭", { id: segment.id });
   }
 
+  async updateFocusSegment(segment: FocusSegment): Promise<void> {
+    const updated = await this.database
+      .update(focusSegments)
+      .set({
+        startedAt: new Date(segment.startedAt),
+        endedAt: dateOrNull(segment.endedAt),
+        closeReason: segment.closeReason,
+      })
+      .where(
+        and(
+          eq(focusSegments.userId, segment.userId),
+          eq(focusSegments.sessionId, segment.sessionId),
+          eq(focusSegments.id, segment.id),
+        ),
+      )
+      .returning({ id: focusSegments.id });
+    if (updated.length !== 1) throw new DomainError("REVISION_CONFLICT", "专注时间段已被其他操作修改", { id: segment.id });
+  }
+
   async insertFocusAdjustment(adjustment: FocusAdjustment): Promise<void> {
     await this.database.insert(focusAdjustments).values({
       ...adjustment,
+      beforeStartedAt: dateOrNull(adjustment.beforeStartedAt),
+      afterStartedAt: dateOrNull(adjustment.afterStartedAt),
+      beforeEndedAt: dateOrNull(adjustment.beforeEndedAt),
+      afterEndedAt: dateOrNull(adjustment.afterEndedAt),
       createdAt: new Date(adjustment.createdAt),
     });
   }
@@ -171,16 +205,23 @@ export class PostgresExecutionStoreTransaction implements ExecutionStoreTransact
   }
 
   async saveProgressEntry(entry: ProgressEntry, previousRevision: number | null): Promise<void> {
-    if (previousRevision === null) {
-      await this.database.insert(progressEntries).values(progressEntryToRow(entry));
-      return;
+    try {
+      if (previousRevision === null) {
+        await this.database.insert(progressEntries).values(progressEntryToRow(entry));
+        return;
+      }
+      const updated = await this.database
+        .update(progressEntries)
+        .set(progressEntryToRow(entry))
+        .where(and(eq(progressEntries.userId, entry.userId), eq(progressEntries.id, entry.id), eq(progressEntries.revision, previousRevision)))
+        .returning({ id: progressEntries.id });
+      assertUpdated(updated, entry);
+    } catch (error) {
+      if (postgresCode(error) === "23505" && entry.focusSessionId) {
+        throw new DomainError("FOCUS_FEEDBACK_EXISTS", "这段专注已经记录过结果");
+      }
+      throw error;
     }
-    const updated = await this.database
-      .update(progressEntries)
-      .set(progressEntryToRow(entry))
-      .where(and(eq(progressEntries.userId, entry.userId), eq(progressEntries.id, entry.id), eq(progressEntries.revision, previousRevision)))
-      .returning({ id: progressEntries.id });
-    assertUpdated(updated, entry);
   }
 
   findItem(userId: string, id: string) {

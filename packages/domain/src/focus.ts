@@ -39,8 +39,13 @@ export interface FocusAdjustment {
   id: string;
   userId: string;
   sessionId: string;
+  kind: "duration" | "boundaries";
   beforeSeconds: number;
   afterSeconds: number;
+  beforeStartedAt: string | null;
+  afterStartedAt: string | null;
+  beforeEndedAt: string | null;
+  afterEndedAt: string | null;
   reason: string;
   createdAt: string;
 }
@@ -49,6 +54,12 @@ export interface FocusMutation {
   session: FocusSession;
   openedSegment?: FocusSegment;
   closedSegment?: FocusSegment;
+}
+
+export interface FocusBoundaryMutation {
+  session: FocusSession;
+  segments: FocusSegment[];
+  adjustment: FocusAdjustment;
 }
 
 export function startFocus(
@@ -266,12 +277,111 @@ export function adjustFocusDuration(
       id: context.ids.next(),
       userId: context.userId,
       sessionId: current.id,
+      kind: "duration",
       beforeSeconds,
       afterSeconds,
+      beforeStartedAt: null,
+      afterStartedAt: null,
+      beforeEndedAt: null,
+      afterEndedAt: null,
       reason: normalizeAdjustmentReason(reason),
       createdAt: now,
     },
   };
+}
+
+export function adjustFocusBoundaries(
+  current: FocusSession,
+  currentSegments: readonly FocusSegment[],
+  input: { startedAt: string; endedAt: string; reason: string },
+  context: CommandContext,
+  expectedRevision?: number,
+): FocusBoundaryMutation {
+  assertSession(current, context.userId, expectedRevision);
+  if (current.state !== "awaiting_feedback" && current.state !== "completed") {
+    throw invalidTransition(current.state, "adjust boundaries");
+  }
+  if (current.endedAt === null || currentSegments.length === 0) {
+    throw new DomainError("INVALID_RELATION", "已结束专注必须包含可审计的时间段");
+  }
+
+  const segments = [...currentSegments].sort((left, right) => left.startedAt.localeCompare(right.startedAt));
+  for (const segment of segments) {
+    if (segment.userId !== current.userId || segment.sessionId !== current.id || segment.endedAt === null) {
+      throw new DomainError("INVALID_RELATION", "专注时间段与会话不匹配");
+    }
+  }
+  const first = segments[0]!;
+  const last = segments.at(-1)!;
+  if (first.startedAt !== current.startedAt || last.endedAt !== current.endedAt) {
+    throw new DomainError("INVALID_RELATION", "专注边界与时间段不一致，不能静默修正");
+  }
+
+  const startedAt = normalizeInstant(input.startedAt, "开始时间");
+  const endedAt = normalizeInstant(input.endedAt, "结束时间");
+  if (startedAt === current.startedAt && endedAt === current.endedAt) {
+    throw new DomainError("INVALID_RELATION", "开始时间和结束时间均未变化");
+  }
+  if (Date.parse(startedAt) > Date.parse(first.endedAt!)) {
+    throw new DomainError("INVALID_RELATION", "开始时间不能晚于第一段专注的结束时间");
+  }
+  if (Date.parse(endedAt) < Date.parse(last.startedAt)) {
+    throw new DomainError("INVALID_RELATION", "结束时间不能早于最后一段专注的开始时间");
+  }
+  if (Date.parse(endedAt) < Date.parse(startedAt)) {
+    throw new DomainError("INVALID_RELATION", "结束时间不能早于开始时间");
+  }
+
+  const adjustedSegments = segments.map((segment, index) => ({
+    ...segment,
+    startedAt: index === 0 ? startedAt : segment.startedAt,
+    endedAt: index === segments.length - 1 ? endedAt : segment.endedAt,
+  }));
+  const baseActiveSeconds = adjustedSegments.reduce((total, segment) => total + segmentSeconds(segment), 0);
+  if (baseActiveSeconds > 24 * 60 * 60) {
+    throw new DomainError("INVALID_RELATION", "修正后的单次有效时长不能超过 24 小时");
+  }
+
+  const now = toIso(context.clock.now());
+  const beforeSeconds = current.effectiveSeconds ?? current.baseActiveSeconds;
+  const hasDurationOverride = current.effectiveSeconds !== null && current.effectiveSeconds !== current.baseActiveSeconds;
+  const afterSeconds = hasDurationOverride ? current.effectiveSeconds! : baseActiveSeconds;
+  return {
+    session: {
+      ...current,
+      startedAt,
+      endedAt,
+      baseActiveSeconds,
+      effectiveSeconds: afterSeconds,
+      revision: current.revision + 1,
+      updatedAt: now,
+    },
+    segments: adjustedSegments,
+    adjustment: {
+      id: context.ids.next(),
+      userId: context.userId,
+      sessionId: current.id,
+      kind: "boundaries",
+      beforeSeconds,
+      afterSeconds,
+      beforeStartedAt: current.startedAt,
+      afterStartedAt: startedAt,
+      beforeEndedAt: current.endedAt,
+      afterEndedAt: endedAt,
+      reason: normalizeAdjustmentReason(input.reason),
+      createdAt: now,
+    },
+  };
+}
+
+export function attachDeferredFocusFeedback(
+  current: FocusSession,
+  context: CommandContext,
+  expectedRevision?: number,
+): FocusSession {
+  assertSession(current, context.userId, expectedRevision);
+  if (current.state !== "completed") throw invalidTransition(current.state, "add deferred feedback");
+  return { ...current, revision: current.revision + 1, updatedAt: toIso(context.clock.now()) };
 }
 
 export function retargetFocus(
@@ -370,6 +480,12 @@ function normalizeAdjustmentReason(value: string): string {
   if (!normalized) throw new DomainError("INVALID_RELATION", "调整原因不能为空");
   if (normalized.length > 500) throw new DomainError("INVALID_RELATION", "调整原因过长");
   return normalized;
+}
+
+function normalizeInstant(value: string, field: string): string {
+  const time = Date.parse(value);
+  if (!Number.isFinite(time)) throw new DomainError("INVALID_RELATION", `${field}不是有效时间`);
+  return new Date(time).toISOString();
 }
 
 function addSeconds(iso: string, seconds: number): string {

@@ -15,6 +15,7 @@
   "dependencies": {
     "@time-friend/db": "workspace:*",
     "@time-friend/domain": "workspace:*",
+    "@time-friend/observability": "workspace:*",
     "drizzle-orm": "0.45.2",
     "pg-boss": "12.27.0",
     "zod": "4.4.3"

@@ -1,5 +1,7 @@
 import {
+  adjustFocusBoundaries,
   adjustFocusDuration,
+  attachDeferredFocusFeedback,
   cancelFocus,
   capStopwatch,
   completeFocusFeedback,
@@ -34,8 +36,10 @@ export interface ExecutionStoreTransaction {
   listFocusSessions(input: { userId: string; taskId?: string; from?: string; to?: string }): Promise<FocusSession[]>;
   saveFocusSession(session: FocusSession, previousRevision: number | null): Promise<void>;
   findOpenFocusSegment(userId: string, sessionId: string): Promise<FocusSegment | null>;
+  listFocusSegments(userId: string, sessionId: string, lock?: boolean): Promise<FocusSegment[]>;
   insertFocusSegment(segment: FocusSegment): Promise<void>;
   closeFocusSegment(segment: FocusSegment): Promise<void>;
+  updateFocusSegment(segment: FocusSegment): Promise<void>;
   insertFocusAdjustment(adjustment: FocusAdjustment): Promise<void>;
   findProgressEntry(userId: string, id: string, lock?: boolean): Promise<ProgressEntry | null>;
   listProgressEntries(input: {
@@ -85,6 +89,13 @@ export interface TaskExecutionSummary {
   sessionCount: number;
   pomodoroCount: number;
   recentProgress: ProgressEntry[];
+}
+
+interface FocusOutcomeInput {
+  outcome: Exclude<ProgressOutcome, "note">;
+  note?: string | null;
+  nextStep?: string | null;
+  completeTask?: boolean;
 }
 
 export class ExecutionService {
@@ -159,7 +170,7 @@ export class ExecutionService {
   }
 
   pauseFocus(userId: string, id: string, expectedRevision: number): Promise<FocusSessionView> {
-    return this.mutateFocus(userId, id, expectedRevision, "focus_paused", (session, open) => {
+    return this.mutateFocus(userId, id, "focus_paused", (session, open) => {
       if (!open) throw new DomainError("INVALID_RELATION", "运行中的专注缺少开放时间段");
       return pauseFocus(session, open, this.context(userId), expectedRevision);
     });
@@ -182,13 +193,13 @@ export class ExecutionService {
   }
 
   finishFocus(userId: string, id: string, expectedRevision: number): Promise<FocusSessionView> {
-    return this.mutateFocus(userId, id, expectedRevision, "focus_finished", (session, open) =>
+    return this.mutateFocus(userId, id, "focus_finished", (session, open) =>
       finishFocus(session, open, this.context(userId), expectedRevision),
     );
   }
 
   cancelFocus(userId: string, id: string, expectedRevision: number): Promise<FocusSessionView> {
-    return this.mutateFocus(userId, id, expectedRevision, "focus_finished", (session, open) =>
+    return this.mutateFocus(userId, id, "focus_finished", (session, open) =>
       cancelFocus(session, open, this.context(userId), expectedRevision),
     );
   }
@@ -244,53 +255,20 @@ export class ExecutionService {
         this.context(userId),
         input.effectiveSeconds === undefined ? input.expectedRevision : pending.revision,
       );
-      const task = session.taskId ? await this.requireTask(transaction, userId, session.taskId) : null;
-      if (input.completeTask && !task) throw new DomainError("INVALID_RELATION", "未关联任务的专注不能完成任务");
-
-      const progress =
-        input.outcome === null
-          ? null
-          : createProgress(
-              {
-                taskId: session.taskId,
-                focusSessionId: session.id,
-                source: "focus_end",
-                outcome: input.outcome,
-                note: input.note,
-                nextStep: input.nextStep,
-                occurredAt: session.endedAt!,
-              },
-              this.context(userId),
-            );
-      const taskEvents: TaskEventDraft[] = [];
-      let updatedTask = task;
-      if (input.completeTask && task) {
-        if (task.status === "pending") {
-          const completed = transitionTaskState(task, "complete", this.context(userId), task.revision);
-          updatedTask = completed.item;
-          await transaction.saveItem(completed.item, task.revision);
-          taskEvents.push(...completed.events);
-        } else if (task.status !== "completed") {
-          throw new DomainError("INVALID_TASK_TRANSITION", "已放弃任务不能由专注反馈完成");
-        }
-      }
-      if (progress) {
-        await transaction.saveProgressEntry(progress, null);
-        if (task) {
-          taskEvents.push({
-            taskId: task.id,
-            eventType: "progress_created",
-            actorType: "user",
-            occurredAt: progress.occurredAt,
-            payload: { progressEntryId: progress.id, focusSessionId: session.id, outcome: progress.outcome },
+      const outcome = input.outcome === null
+        ? { progress: null, task: session.taskId ? await this.requireTask(transaction, userId, session.taskId) : null, events: [] }
+        : await this.recordFocusOutcome(transaction, session, {
+            outcome: input.outcome,
+            note: input.note,
+            nextStep: input.nextStep,
+            completeTask: input.completeTask,
           });
-        }
-      }
+      const taskEvents = [...outcome.events];
       if (adjustment) {
         await transaction.insertFocusAdjustment(adjustment);
-        if (task) {
+        if (outcome.task) {
           taskEvents.push({
-            taskId: task.id,
+            taskId: outcome.task.id,
             eventType: "focus_adjusted",
             actorType: "user",
             occurredAt: adjustment.createdAt,
@@ -300,7 +278,24 @@ export class ExecutionService {
       }
       await transaction.saveFocusSession(session, current.revision);
       await transaction.appendTaskEvents(this.materializeEvents(userId, taskEvents));
-      return { session, progress, task: updatedTask };
+      return { session, progress: outcome.progress, task: outcome.task };
+    });
+  }
+
+  async addDeferredFocusFeedback(
+    userId: string,
+    id: string,
+    input: FocusOutcomeInput & { expectedRevision: number },
+  ): Promise<{ session: FocusSession; progress: ProgressEntry; task: Item | null }> {
+    return this.dependencies.store.transaction(async (transaction) => {
+      const current = await requireResource(transaction.lockFocusSession(userId, id), "专注记录不存在");
+      const existing = await transaction.listProgressEntries({ userId, focusSessionId: id });
+      if (existing.length > 0) throw new DomainError("FOCUS_FEEDBACK_EXISTS", "这段专注已经记录过结果");
+      const session = attachDeferredFocusFeedback(current, this.context(userId), input.expectedRevision);
+      const outcome = await this.recordFocusOutcome(transaction, session, input);
+      await transaction.saveFocusSession(session, current.revision);
+      await transaction.appendTaskEvents(this.materializeEvents(userId, outcome.events));
+      return { session, progress: outcome.progress, task: outcome.task };
     });
   }
 
@@ -316,6 +311,32 @@ export class ExecutionService {
       await transaction.insertFocusAdjustment(mutation.adjustment);
       const task = current.taskId ? await this.requireTask(transaction, userId, current.taskId) : null;
       await this.appendFocusEvent(transaction, mutation.session, task, "focus_adjusted", {
+        beforeSeconds: mutation.adjustment.beforeSeconds,
+        afterSeconds: mutation.adjustment.afterSeconds,
+      });
+      return mutation.session;
+    });
+  }
+
+  async adjustFocusBoundaries(
+    userId: string,
+    id: string,
+    input: { startedAt: string; endedAt: string; reason: string; expectedRevision: number },
+  ): Promise<FocusSession> {
+    return this.dependencies.store.transaction(async (transaction) => {
+      const current = await requireResource(transaction.lockFocusSession(userId, id), "专注记录不存在");
+      const segments = await transaction.listFocusSegments(userId, id, true);
+      const mutation = adjustFocusBoundaries(current, segments, input, this.context(userId), input.expectedRevision);
+      for (const segment of mutation.segments) await transaction.updateFocusSegment(segment);
+      await transaction.saveFocusSession(mutation.session, current.revision);
+      await transaction.insertFocusAdjustment(mutation.adjustment);
+      const task = current.taskId ? await this.requireTask(transaction, userId, current.taskId) : null;
+      await this.appendFocusEvent(transaction, mutation.session, task, "focus_adjusted", {
+        kind: "boundaries",
+        beforeStartedAt: mutation.adjustment.beforeStartedAt,
+        afterStartedAt: mutation.adjustment.afterStartedAt,
+        beforeEndedAt: mutation.adjustment.beforeEndedAt,
+        afterEndedAt: mutation.adjustment.afterEndedAt,
         beforeSeconds: mutation.adjustment.beforeSeconds,
         afterSeconds: mutation.adjustment.afterSeconds,
       });
@@ -434,7 +455,6 @@ export class ExecutionService {
   private async mutateFocus(
     userId: string,
     id: string,
-    expectedRevision: number,
     eventType: "focus_paused" | "focus_finished",
     mutate: (session: FocusSession, open: FocusSegment | null) => FocusMutation,
   ): Promise<FocusSessionView> {
@@ -447,6 +467,55 @@ export class ExecutionService {
       await this.appendFocusEvent(transaction, mutation.session, task, eventType, { state: mutation.session.state });
       return this.view(mutation.session, mutation.openedSegment ?? null);
     });
+  }
+
+  private async recordFocusOutcome(
+    transaction: ExecutionStoreTransaction,
+    session: FocusSession,
+    input: FocusOutcomeInput,
+  ): Promise<{ progress: ProgressEntry; task: Item | null; events: TaskEventDraft[] }> {
+    if (input.completeTask && input.outcome !== "completed") {
+      throw new DomainError("INVALID_RELATION", "只有完成反馈才能同时完成任务");
+    }
+    const task = session.taskId ? await this.requireTask(transaction, session.userId, session.taskId) : null;
+    if (input.completeTask && !task) throw new DomainError("INVALID_RELATION", "未关联任务的专注不能完成任务");
+    if (session.endedAt === null) throw new DomainError("INVALID_RELATION", "未结束专注不能记录结果");
+
+    const progress = createProgress(
+      {
+        taskId: session.taskId,
+        focusSessionId: session.id,
+        source: "focus_end",
+        outcome: input.outcome,
+        note: input.note,
+        nextStep: input.nextStep,
+        occurredAt: session.endedAt,
+      },
+      this.context(session.userId),
+    );
+    const events: TaskEventDraft[] = [];
+    let updatedTask = task;
+    if (input.completeTask && task) {
+      if (task.status === "pending") {
+        const completed = transitionTaskState(task, "complete", this.context(session.userId), task.revision);
+        updatedTask = completed.item;
+        await transaction.saveItem(completed.item, task.revision);
+        events.push(...completed.events);
+      } else if (task.status !== "completed") {
+        throw new DomainError("INVALID_TASK_TRANSITION", "已放弃任务不能由专注反馈完成");
+      }
+    }
+    await transaction.saveProgressEntry(progress, null);
+    if (task) {
+      events.push({
+        taskId: task.id,
+        eventType: "progress_created",
+        actorType: "user",
+        occurredAt: progress.occurredAt,
+        payload: { progressEntryId: progress.id, focusSessionId: session.id, outcome: progress.outcome },
+      });
+    }
+    return { progress, task: updatedTask, events };
   }
 
   private async deadlineTransition(

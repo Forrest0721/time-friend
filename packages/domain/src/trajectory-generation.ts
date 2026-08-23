@@ -37,6 +37,8 @@ export interface AgentRunRecord {
   inputTokens: number | null;
   outputTokens: number | null;
   durationMs: number | null;
+  toolCalls?: import("./trajectory-review.js").AgentToolCallAudit[];
+  estimatedCostMicrousd?: number | null;
   attempts: number;
   errorCode: string | null;
   errorDetailRedacted: string | null;
@@ -69,6 +71,7 @@ export interface ReviewClaimRecord {
   confidence: ReviewConfidence;
   status: ReviewClaimStatus;
   userRevision: string | null;
+  correctionKind?: import("./trajectory-feedback.js").ClaimCorrectionKind | null;
   position: number;
   proposedDirection: GeneratedReview["claims"][number]["proposedDirection"];
 }
@@ -80,6 +83,13 @@ export interface EvidenceRefRecord extends ReviewEvidenceRef {
   excerpt: string | null;
   excludedAt: string | null;
   exclusionReason: string | null;
+  detail?: {
+    title: string;
+    occurredAt: string;
+    taskId: string | null;
+    listId: string | null;
+    metrics: Record<string, unknown>;
+  } | null;
 }
 
 export interface MemoryCandidateRecord {
@@ -265,6 +275,7 @@ export function materializeReview(
       confidence: claim.confidence,
       status: "pending",
       userRevision: null,
+      correctionKind: null,
       position,
       proposedDirection: claim.proposedDirection,
     });
@@ -277,6 +288,7 @@ export function materializeReview(
         excerpt: null,
         excludedAt: null,
         exclusionReason: null,
+        detail: null,
       });
     }
     if (claim.memoryCandidate) {

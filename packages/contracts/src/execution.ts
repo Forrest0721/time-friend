@@ -103,11 +103,43 @@ export const focusFeedbackResultSchema = z.strictObject({
   task: itemSchema.nullable(),
 });
 
+export const deferredFocusFeedbackBodySchema = z
+  .strictObject({
+    outcome: focusOutcomeSchema,
+    note: z.string().trim().max(2_000).nullable().optional(),
+    nextStep: z.string().trim().max(1_000).nullable().optional(),
+    completeTask: z.boolean().default(false),
+    expectedRevision: revisionSchema,
+  })
+  .superRefine((value, context) => {
+    if (value.completeTask && value.outcome !== "completed") {
+      context.addIssue({ code: "custom", path: ["completeTask"], message: "只有完成反馈才能同时完成任务" });
+    }
+  });
+
+export const deferredFocusFeedbackResultSchema = z.strictObject({
+  session: focusSessionSchema,
+  progress: progressEntrySchema,
+  task: itemSchema.nullable(),
+});
+
 export const adjustFocusBodySchema = z.strictObject({
   effectiveSeconds: z.int().min(0).max(86_400),
   reason: z.string().trim().min(1).max(500),
   expectedRevision: revisionSchema,
 });
+
+export const adjustFocusBoundariesBodySchema = z
+  .strictObject({
+    startedAt: isoDateTimeSchema,
+    endedAt: isoDateTimeSchema,
+    reason: z.string().trim().min(1).max(500),
+    expectedRevision: revisionSchema,
+  })
+  .refine((value) => Date.parse(value.startedAt) <= Date.parse(value.endedAt), {
+    path: ["endedAt"],
+    message: "结束时间不能早于开始时间",
+  });
 
 export const retargetFocusBodySchema = z.strictObject({ taskId: uuidSchema.nullable(), expectedRevision: revisionSchema });
 export const deleteFocusQuerySchema = z.strictObject({ expectedRevision: z.coerce.number().int().positive() });

@@ -100,6 +100,17 @@ export interface GeneratedReviewResult {
   sdkTraceId: string | null;
   usage: { inputTokens: number | null; outputTokens: number | null };
   durationMs: number;
+  toolCalls?: AgentToolCallAudit[];
+  estimatedCostMicrousd?: number | null;
+}
+
+export interface AgentToolCallAudit {
+  name: string;
+  status: "succeeded" | "failed";
+  durationMs: number;
+  inputHash: string;
+  outputHash: string | null;
+  errorCode: string | null;
 }
 
 export interface AgentRunner {

@@ -8,12 +8,14 @@ import type {
   TrajectoryStoreTransaction,
   WeeklyPeriod,
 } from "@time-friend/domain";
-import { PERIOD_FACTS_SCHEMA_VERSION } from "@time-friend/domain";
+import { allocateEffectiveSecondsToPeriod, PERIOD_FACTS_SCHEMA_VERSION } from "@time-friend/domain";
 
 import type { TimeFriendDatabase } from "../client.js";
 import {
   focusSegments,
   focusSessions,
+  confirmedMemories,
+  confirmedMemoryEvidenceDependencies,
   items,
   lists,
   periods,
@@ -256,6 +258,23 @@ export class PostgresTrajectoryStoreTransaction implements TrajectoryStoreTransa
     for (const row of taskEventRows) relevantTaskIds.add(row.taskId);
     const relevantTasks = taskInputs.filter((entry) => relevantTaskIds.has(entry.id));
     const taskById = new Map(taskInputs.map((entry) => [entry.id, entry]));
+    const segmentsBySession = new Map<string, typeof segmentRows>();
+    for (const segment of segmentRows) segmentsBySession.set(segment.sessionId, [...(segmentsBySession.get(segment.sessionId) ?? []), segment]);
+    const periodStartMs = Date.parse(period.startsAt);
+    const periodEndMs = Date.parse(period.endsAt);
+    const watermarkMs = Date.parse(sourceWatermark);
+    const focusSecondsBySession = new Map(sessionRows.map((session) => [
+      session.id,
+      allocateEffectiveSecondsToPeriod(
+        session.effectiveSeconds,
+        (segmentsBySession.get(session.id) ?? []).map((segment) => ({
+          startMs: segment.startedAt.getTime(),
+          endMs: Math.min(segment.endedAt?.getTime() ?? watermarkMs, watermarkMs),
+        })),
+        periodStartMs,
+        periodEndMs,
+      ),
+    ]));
     const evidenceDocuments: SnapshotEvidenceDocument[] = [
       ...relevantTasks.map((task) => ({
         entityType: "task" as const,
@@ -265,6 +284,7 @@ export class PostgresTrajectoryStoreTransaction implements TrajectoryStoreTransa
         occurredAt: task.createdAt.toISOString(),
         taskId: task.id,
         listId: task.listId,
+        metrics: { status: task.status, plannedOn: task.plannedOn },
       })),
       ...sessionRows.map((session) => ({
         entityType: "focus_session" as const,
@@ -274,6 +294,7 @@ export class PostgresTrajectoryStoreTransaction implements TrajectoryStoreTransa
         occurredAt: session.startedAt.toISOString(),
         taskId: session.taskId,
         listId: session.taskId ? taskById.get(session.taskId)?.listId ?? null : null,
+        metrics: { mode: session.mode, periodSeconds: focusSecondsBySession.get(session.id) ?? 0 },
       })),
       ...progressRows.map((progress) => ({
         entityType: "progress_entry" as const,
@@ -283,6 +304,7 @@ export class PostgresTrajectoryStoreTransaction implements TrajectoryStoreTransa
         occurredAt: progress.occurredAt.toISOString(),
         taskId: progress.taskId,
         listId: progress.taskId ? taskById.get(progress.taskId)?.listId ?? null : null,
+        metrics: { outcome: progress.outcome },
       })),
       ...taskEventRows.map((event) => ({
         entityType: "task_event" as const,
@@ -292,6 +314,7 @@ export class PostgresTrajectoryStoreTransaction implements TrajectoryStoreTransa
         occurredAt: event.occurredAt.toISOString(),
         taskId: event.taskId,
         listId: taskById.get(event.taskId)?.listId ?? null,
+        metrics: { eventType: event.eventType },
       })),
     ];
 
@@ -380,6 +403,7 @@ export class PostgresTrajectoryStoreTransaction implements TrajectoryStoreTransa
           occurredAt: new Date(document.occurredAt),
           taskId: document.taskId,
           listId: document.listId,
+          metricsJson: document.metrics,
           createdAt: new Date(snapshot.createdAt),
         })),
       );
@@ -438,18 +462,43 @@ export class PostgresTrajectoryStoreTransaction implements TrajectoryStoreTransa
           eq(snapshotEvidence.entityId, entityId),
         ),
       );
-    if (matchingSnapshots.length === 0) return 0;
-    const changed = await this.database
-      .update(periodSnapshots)
-      .set({ status: "stale" })
-      .where(
-        and(
-          eq(periodSnapshots.userId, userId),
-          inArray(periodSnapshots.id, matchingSnapshots.map((entry) => entry.id)),
-          eq(periodSnapshots.status, "current"),
-        ),
-      )
-      .returning({ id: periodSnapshots.id });
+    const changed = matchingSnapshots.length === 0
+      ? []
+      : await this.database
+          .update(periodSnapshots)
+          .set({ status: "stale" })
+          .where(
+            and(
+              eq(periodSnapshots.userId, userId),
+              inArray(periodSnapshots.id, matchingSnapshots.map((entry) => entry.id)),
+              eq(periodSnapshots.status, "current"),
+            ),
+          )
+          .returning({ id: periodSnapshots.id });
+    const dependencies = await this.database
+      .select({ id: confirmedMemoryEvidenceDependencies.id, memoryId: confirmedMemoryEvidenceDependencies.memoryId })
+      .from(confirmedMemoryEvidenceDependencies)
+      .where(and(
+        eq(confirmedMemoryEvidenceDependencies.userId, userId),
+        eq(confirmedMemoryEvidenceDependencies.entityType, entityType),
+        eq(confirmedMemoryEvidenceDependencies.entityId, entityId),
+        isNull(confirmedMemoryEvidenceDependencies.invalidatedAt),
+      ));
+    if (dependencies.length > 0) {
+      const reviewRequiredAt = new Date();
+      await this.database
+        .update(confirmedMemoryEvidenceDependencies)
+        .set({ invalidatedAt: reviewRequiredAt })
+        .where(inArray(confirmedMemoryEvidenceDependencies.id, dependencies.map((entry) => entry.id)));
+      await this.database
+        .update(confirmedMemories)
+        .set({ reviewRequiredAt, reviewRequiredReason: `${entityType}:${entityId} 已修改或删除`, updatedAt: reviewRequiredAt })
+        .where(and(
+          eq(confirmedMemories.userId, userId),
+          eq(confirmedMemories.status, "active"),
+          inArray(confirmedMemories.id, [...new Set(dependencies.map((entry) => entry.memoryId))]),
+        ));
+    }
     return changed.length;
   }
 

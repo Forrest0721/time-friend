@@ -101,6 +101,61 @@ describe("ExecutionService", () => {
     expect(fixture.store.events).toHaveLength(0);
   });
 
+  it("adds feedback later exactly once after the user initially skips it", async () => {
+    const fixture = setup();
+    fixture.store.items.push(itemFixture({ id: "task-1" }));
+    const started = await fixture.service.startFocus("user-1", { taskId: "task-1", mode: "stopwatch" });
+    fixture.setNow("2026-08-22T08:05:00.000Z");
+    await fixture.service.finishFocus("user-1", started.session.id, 1);
+    const skipped = await fixture.service.submitFocusFeedback("user-1", started.session.id, {
+      outcome: null,
+      expectedRevision: 2,
+    });
+    expect(skipped).toMatchObject({ session: { state: "completed", revision: 3 }, progress: null });
+
+    const supplemented = await fixture.service.addDeferredFocusFeedback("user-1", started.session.id, {
+      outcome: "progressed",
+      note: "补记这次推进",
+      expectedRevision: 3,
+    });
+    expect(supplemented).toMatchObject({
+      session: { state: "completed", revision: 4 },
+      progress: { outcome: "progressed", focusSessionId: started.session.id },
+    });
+    await expect(
+      fixture.service.addDeferredFocusFeedback("user-1", started.session.id, {
+        outcome: "blocked",
+        expectedRevision: 4,
+      }),
+    ).rejects.toMatchObject({ code: "FOCUS_FEEDBACK_EXISTS" });
+  });
+
+  it("corrects start and end boundaries through persisted segments and an audit adjustment", async () => {
+    const fixture = setup();
+    fixture.store.items.push(itemFixture({ id: "task-1" }));
+    const started = await fixture.service.startFocus("user-1", { taskId: "task-1", mode: "stopwatch" });
+    fixture.setNow("2026-08-22T08:10:00.000Z");
+    await fixture.service.pauseFocus("user-1", started.session.id, 1);
+    fixture.setNow("2026-08-22T08:15:00.000Z");
+    await fixture.service.resumeFocus("user-1", started.session.id, 2);
+    fixture.setNow("2026-08-22T08:20:00.000Z");
+    await fixture.service.finishFocus("user-1", started.session.id, 3);
+    await fixture.service.submitFocusFeedback("user-1", started.session.id, { outcome: null, expectedRevision: 4 });
+
+    const corrected = await fixture.service.adjustFocusBoundaries("user-1", started.session.id, {
+      startedAt: "2026-08-22T08:01:00.000Z",
+      endedAt: "2026-08-22T08:19:00.000Z",
+      reason: "核对会议记录后修正",
+      expectedRevision: 5,
+    });
+    expect(corrected).toMatchObject({ baseActiveSeconds: 780, effectiveSeconds: 780, revision: 6 });
+    expect(fixture.store.segments).toEqual([
+      expect.objectContaining({ startedAt: "2026-08-22T08:01:00.000Z", endedAt: "2026-08-22T08:10:00.000Z" }),
+      expect.objectContaining({ startedAt: "2026-08-22T08:15:00.000Z", endedAt: "2026-08-22T08:19:00.000Z" }),
+    ]);
+    expect(fixture.store.adjustments.at(-1)).toMatchObject({ kind: "boundaries", beforeSeconds: 900, afterSeconds: 780 });
+  });
+
   it("treats stale deadline jobs as successful no-ops", async () => {
     const fixture = setup();
     const started = await fixture.service.startFocus("user-1", { mode: "pomodoro", plannedSeconds: 60 });
@@ -169,11 +224,20 @@ class MemoryExecutionStore implements ExecutionStoreTransaction {
     return this.segments.find((segment) => segment.userId === userId && segment.sessionId === sessionId && segment.endedAt === null) ?? null;
   }
 
+  async listFocusSegments(userId: string, sessionId: string) {
+    return this.segments.filter((segment) => segment.userId === userId && segment.sessionId === sessionId);
+  }
+
   async insertFocusSegment(segment: FocusSegment) {
     this.segments.push(segment);
   }
 
   async closeFocusSegment(segment: FocusSegment) {
+    const index = this.segments.findIndex((entry) => entry.id === segment.id);
+    this.segments[index] = segment;
+  }
+
+  async updateFocusSegment(segment: FocusSegment) {
     const index = this.segments.findIndex((entry) => entry.id === segment.id);
     this.segments[index] = segment;
   }

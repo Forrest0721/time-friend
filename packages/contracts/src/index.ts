@@ -6,3 +6,4 @@ export * from "./items.js";
 export * from "./organization.js";
 export * from "./settings.js";
 export * from "./trajectory.js";
+export * from "./telemetry.js";

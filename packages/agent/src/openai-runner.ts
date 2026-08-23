@@ -5,12 +5,14 @@ import {
   hashCanonical,
   TRAJECTORY_WORKFLOW_NAME,
   type AgentRunner,
+  type AgentToolCallAudit,
   type GeneratedReviewResult,
   type GenerateWeeklyReviewInput,
 } from "@time-friend/domain";
 
 import { weeklyReviewOutputSchema, type WeeklyReviewOutput } from "./schema.js";
 import { createTrajectoryTools } from "./tools.js";
+import { recordFailure, recordProductEvent } from "@time-friend/observability";
 
 export interface AgentRuntimeResult {
   finalOutput: WeeklyReviewOutput | undefined;
@@ -28,6 +30,7 @@ export class OpenAITrajectoryAgentRunner implements AgentRunner {
       runtime?: AgentRuntime;
       now?: () => number;
       traceId?: () => string;
+      pricing?: { inputUsdPerMillionTokens: number; outputUsdPerMillionTokens: number };
     },
   ) {
     if (!configuration.model.trim()) throw new Error("TRAJECTORY_MODEL is required");
@@ -36,7 +39,8 @@ export class OpenAITrajectoryAgentRunner implements AgentRunner {
   async generateWeeklyReview(input: GenerateWeeklyReviewInput): Promise<GeneratedReviewResult> {
     const startedAt = (this.configuration.now ?? Date.now)();
     const traceId = (this.configuration.traceId ?? generateTraceId)();
-    const agent = createTrajectoryReviewAgent(input, this.configuration.model);
+    const toolCalls: AgentToolCallAudit[] = [];
+    const agent = createTrajectoryReviewAgent(input, this.configuration.model, toolCalls, this.configuration.now ?? Date.now);
     const runtime = this.configuration.runtime ?? this.createRuntime(input, traceId);
     const result = await runtime.run(agent, buildRunPrompt(input), { maxTurns: 8 });
     if (!result.finalOutput) throw new Error("AGENT_EMPTY_OUTPUT");
@@ -48,6 +52,8 @@ export class OpenAITrajectoryAgentRunner implements AgentRunner {
       sdkTraceId: traceId,
       usage: { inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens },
       durationMs: Math.max(0, (this.configuration.now ?? Date.now)() - startedAt),
+      toolCalls,
+      estimatedCostMicrousd: estimateModelCostMicrousd(result.usage, this.configuration.pricing),
     };
   }
 
@@ -82,6 +88,8 @@ export class OpenAITrajectoryAgentRunner implements AgentRunner {
 export function createTrajectoryReviewAgent(
   input: GenerateWeeklyReviewInput,
   model: string,
+  toolCalls: AgentToolCallAudit[] = [],
+  now: () => number = Date.now,
 ): Agent<unknown, typeof weeklyReviewOutputSchema> {
   return new Agent({
     name: "TrajectoryReviewAgent",
@@ -97,7 +105,7 @@ export function createTrajectoryReviewAgent(
 - 方向只是候选。不得修改任务、方向、记忆或承诺。
 - 最终输出前调用 validate_review_evidence。
 - 数据不足时可以不输出 claim，并明确 limitations。`,
-    tools: createTrajectoryTools(input),
+    tools: createTrajectoryTools(input, toolCalls, now),
     outputType: weeklyReviewOutputSchema,
     outputGuardrails: [
       {
@@ -114,6 +122,8 @@ export function createTrajectoryReviewAgent(
             !parsed.success ||
             texts.some((text) => containsProhibitedDiagnosis(text)) ||
             texts.some((text) => containsUnverifiedMetric(text));
+          recordProductEvent("agent_guardrail", { status: violation ? "blocked" : "passed", schemaValid: parsed.success });
+          if (violation) recordFailure("agent.guardrail", { schemaValid: parsed.success });
           return {
             tripwireTriggered: violation,
             outputInfo: { schemaValid: parsed.success, policyViolation: violation },
@@ -122,6 +132,15 @@ export function createTrajectoryReviewAgent(
       },
     ],
   });
+}
+
+export function estimateModelCostMicrousd(
+  usage: { inputTokens: number; outputTokens: number },
+  pricing?: { inputUsdPerMillionTokens: number; outputUsdPerMillionTokens: number },
+): number | null {
+  if (!pricing) return null;
+  const value = usage.inputTokens * pricing.inputUsdPerMillionTokens + usage.outputTokens * pricing.outputUsdPerMillionTokens;
+  return Math.max(0, Math.round(value));
 }
 
 export function containsUnverifiedMetric(value: string): boolean {

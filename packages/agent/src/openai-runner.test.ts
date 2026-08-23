@@ -1,9 +1,9 @@
 import { RunContext } from "@openai/agents";
 import { describe, expect, it, vi } from "vitest";
 
-import type { GeneratedReview, GenerateWeeklyReviewInput, TrajectoryAgentTools } from "@time-friend/domain";
+import type { AgentToolCallAudit, GeneratedReview, GenerateWeeklyReviewInput, TrajectoryAgentTools } from "@time-friend/domain";
 
-import { containsUnverifiedMetric, createTrajectoryReviewAgent, OpenAITrajectoryAgentRunner, type AgentRuntime } from "./openai-runner.js";
+import { containsUnverifiedMetric, createTrajectoryReviewAgent, estimateModelCostMicrousd, OpenAITrajectoryAgentRunner, type AgentRuntime } from "./openai-runner.js";
 import { weeklyReviewOutputSchema } from "./schema.js";
 import { createTrajectoryTools } from "./tools.js";
 
@@ -22,18 +22,20 @@ describe("OpenAITrajectoryAgentRunner", () => {
       runtime: { run },
       now: vi.fn().mockReturnValueOnce(100).mockReturnValueOnce(145),
       traceId: () => "trace_test",
+      pricing: { inputUsdPerMillionTokens: 1.25, outputUsdPerMillionTokens: 10 },
     });
     const result = await runner.generateWeeklyReview(inputFixture());
 
     expect(run).toHaveBeenCalledWith(expect.objectContaining({ name: "TrajectoryReviewAgent" }), expect.stringContaining(SNAPSHOT_ID), {
       maxTurns: 8,
     });
-    expect(result).toMatchObject({ model: "test-model", provider: "openai", sdkTraceId: "trace_test", durationMs: 45 });
+    expect(result).toMatchObject({ model: "test-model", provider: "openai", sdkTraceId: "trace_test", durationMs: 45, estimatedCostMicrousd: 213, toolCalls: [] });
   });
 
   it("exposes only bounded read-only tools and rejects a foreign snapshot id", async () => {
     const input = inputFixture();
-    const tools = createTrajectoryTools(input);
+    const audit: AgentToolCallAudit[] = [];
+    const tools = createTrajectoryTools(input, audit, () => 100);
     expect(tools.map((entry) => entry.name)).toEqual([
       "get_period_snapshot",
       "search_evidence",
@@ -48,6 +50,7 @@ describe("OpenAITrajectoryAgentRunner", () => {
       getSnapshot.invoke(new RunContext(), JSON.stringify({ snapshotId: "00000000-0000-7000-8000-000000000099" })),
     ).rejects.toThrow("SNAPSHOT_OUT_OF_SCOPE");
     expect(input.tools.getPeriodSnapshot).not.toHaveBeenCalled();
+    expect(audit).toEqual([expect.objectContaining({ name: "get_period_snapshot", status: "failed", durationMs: 0, errorCode: "SNAPSHOT_OUT_OF_SCOPE" })]);
   });
 
   it("enforces schema cardinality and output policy guardrails", async () => {
@@ -65,6 +68,14 @@ describe("OpenAITrajectoryAgentRunner", () => {
       context: new RunContext(),
     });
     expect(result.tripwireTriggered).toBe(true);
+  });
+
+  it("estimates micro-dollar cost from configurable per-million token prices", () => {
+    expect(estimateModelCostMicrousd(
+      { inputTokens: 1_000, outputTokens: 200 },
+      { inputUsdPerMillionTokens: 2, outputUsdPerMillionTokens: 8 },
+    )).toBe(3_600);
+    expect(estimateModelCostMicrousd({ inputTokens: 1_000, outputTokens: 200 })).toBeNull();
   });
 });
 

@@ -109,8 +109,13 @@ export const focusAdjustments = pgTable(
     id: entityId(),
     userId: userIdColumn(),
     sessionId: uuid("session_id").notNull(),
+    kind: text("kind").$type<"duration" | "boundaries">().notNull().default("duration"),
     beforeSeconds: integer("before_seconds").notNull(),
     afterSeconds: integer("after_seconds").notNull(),
+    beforeStartedAt: timestamp("before_started_at", { withTimezone: true, mode: "date" }),
+    afterStartedAt: timestamp("after_started_at", { withTimezone: true, mode: "date" }),
+    beforeEndedAt: timestamp("before_ended_at", { withTimezone: true, mode: "date" }),
+    afterEndedAt: timestamp("after_ended_at", { withTimezone: true, mode: "date" }),
     reason: text("reason").notNull(),
     createdAt: createdAtColumn(),
   },
@@ -122,6 +127,15 @@ export const focusAdjustments = pgTable(
       name: "focus_adjustments_session_fk",
     }).onDelete("cascade"),
     check("focus_adjustments_seconds_valid", sql`${table.beforeSeconds} BETWEEN 0 AND 86400 AND ${table.afterSeconds} BETWEEN 0 AND 86400`),
+    check(
+      "focus_adjustments_kind_valid",
+      sql`(${table.kind} = 'duration'
+          AND ${table.beforeStartedAt} IS NULL AND ${table.afterStartedAt} IS NULL
+          AND ${table.beforeEndedAt} IS NULL AND ${table.afterEndedAt} IS NULL)
+        OR (${table.kind} = 'boundaries'
+          AND ${table.beforeStartedAt} IS NOT NULL AND ${table.afterStartedAt} IS NOT NULL
+          AND ${table.beforeEndedAt} IS NOT NULL AND ${table.afterEndedAt} IS NOT NULL)`,
+    ),
     check("focus_adjustments_reason_not_blank", sql`length(btrim(${table.reason})) > 0`),
     index("focus_adjustments_user_session_created_idx").on(table.userId, table.sessionId, table.createdAt),
   ],

@@ -20,6 +20,8 @@ export function toPublicAgentRun(run: AgentRunRecord): PublicAgentRun {
     inputTokens: run.inputTokens,
     outputTokens: run.outputTokens,
     durationMs: run.durationMs,
+    toolCalls: run.toolCalls ?? [],
+    estimatedCostMicrousd: run.estimatedCostMicrousd ?? null,
     attempts: run.attempts,
     errorCode: run.errorCode,
     createdAt: run.createdAt,

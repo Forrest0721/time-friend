@@ -2,10 +2,13 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 
 import {
+  adjustFocusBoundariesBodySchema,
   adjustFocusBodySchema,
   apiProblemSchema,
   createFocusBodySchema,
   createManualProgressBodySchema,
+  deferredFocusFeedbackBodySchema,
+  deferredFocusFeedbackResultSchema,
   deleteFocusQuerySchema,
   deleteProgressQuerySchema,
   emptyResponseSchema,
@@ -27,6 +30,7 @@ import {
   taskExecutionSummarySchema,
   updateProgressBodySchema,
 } from "@time-friend/contracts";
+import { recordProductEvent } from "@time-friend/observability";
 
 import { paginateByTimeDescending } from "../cursor.js";
 import { toItemDto } from "../mappers.js";
@@ -155,6 +159,40 @@ export function registerExecutionRoutes(instance: FastifyInstance, dependencies:
     },
   );
 
+  app.post(
+    "/api/v1/focus-sessions/:sessionId/progress",
+    {
+      schema: {
+        headers: idempotencyHeadersSchema,
+        params: focusSessionIdParamsSchema,
+        body: deferredFocusFeedbackBodySchema,
+        response: { 201: deferredFocusFeedbackResultSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) => {
+      const user = requireUser(request);
+      const result = await mutate(
+        dependencies,
+        request,
+        user.id,
+        "POST /focus-sessions/:sessionId/progress",
+        { params: request.params, body: request.body },
+        async () => {
+          const feedback = await dependencies.execution.addDeferredFocusFeedback(user.id, request.params.sessionId, request.body);
+          await Promise.all([
+            markFocusSnapshotsStale(dependencies, user.id, feedback.session),
+            markProgressSnapshotsStale(dependencies, user.id, feedback.progress),
+            feedback.task
+              ? dependencies.trajectory.markSnapshotsContainingEntity(user.id, "task", feedback.task.id)
+              : Promise.resolve(0),
+          ]);
+          return { statusCode: 201, body: { ...feedback, task: feedback.task ? toItemDto(feedback.task) : null } };
+        },
+      );
+      return reply.status(result.statusCode).send(result.body);
+    },
+  );
+
   app.patch(
     "/api/v1/focus-sessions/:sessionId/effective-time",
     {
@@ -175,6 +213,36 @@ export function registerExecutionRoutes(instance: FastifyInstance, dependencies:
         { params: request.params, body: request.body },
         async () => {
           const body = await dependencies.execution.adjustFocusDuration(user.id, request.params.sessionId, request.body);
+          recordProductEvent("focus_adjusted", { kind: "duration" });
+          await markFocusSnapshotsStale(dependencies, user.id, body);
+          return { statusCode: 200, body };
+        },
+      );
+      return reply.status(result.statusCode).send(result.body);
+    },
+  );
+
+  app.patch(
+    "/api/v1/focus-sessions/:sessionId/boundaries",
+    {
+      schema: {
+        headers: idempotencyHeadersSchema,
+        params: focusSessionIdParamsSchema,
+        body: adjustFocusBoundariesBodySchema,
+        response: { 200: focusSessionSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) => {
+      const user = requireUser(request);
+      const result = await mutate(
+        dependencies,
+        request,
+        user.id,
+        "PATCH /focus-sessions/:sessionId/boundaries",
+        { params: request.params, body: request.body },
+        async () => {
+          const body = await dependencies.execution.adjustFocusBoundaries(user.id, request.params.sessionId, request.body);
+          recordProductEvent("focus_adjusted", { kind: "boundaries" });
           await markFocusSnapshotsStale(dependencies, user.id, body);
           return { statusCode: 200, body };
         },

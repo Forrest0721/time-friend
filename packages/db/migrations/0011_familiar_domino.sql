@@ -1,0 +1,1 @@
+ALTER TABLE "review_claims" ADD COLUMN "correction_kind" text;

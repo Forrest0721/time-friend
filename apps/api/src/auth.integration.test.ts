@@ -67,6 +67,9 @@ describe("Better Auth integration", () => {
           listReviews: async () => [],
         },
         trajectoryFeedback: {
+          correctClaim: async () => {
+            throw new Error("not used in auth integration test");
+          },
           decideClaim: async () => {
             throw new Error("not used in auth integration test");
           },
@@ -85,6 +88,7 @@ describe("Better Auth integration", () => {
           },
           deleteMemory: async () => undefined,
           listDirections: async () => [],
+          listCurrentCommitments: async () => [],
           updateDirection: async () => {
             throw new Error("not used in auth integration test");
           },

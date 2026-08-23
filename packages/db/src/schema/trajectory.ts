@@ -77,6 +77,7 @@ export const snapshotEvidence = pgTable(
     occurredAt: timestamp("occurred_at", { withTimezone: true, mode: "date" }).notNull(),
     taskId: uuid("task_id"),
     listId: uuid("list_id"),
+    metricsJson: jsonb("metrics_json").$type<Record<string, unknown>>().notNull().default({}),
     createdAt: createdAtColumn(),
   },
   (table) => [

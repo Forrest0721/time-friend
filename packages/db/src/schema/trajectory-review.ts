@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { boolean, check, foreignKey, index, integer, jsonb, pgEnum, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
-import type { GeneratedReview } from "@time-friend/domain";
+import type { AgentToolCallAudit, GeneratedReview } from "@time-friend/domain";
 
 import { createdAtColumn, entityId, updatedAtColumn, userIdColumn } from "./common.js";
 import { users } from "./identity.js";
@@ -42,6 +42,8 @@ export const agentRuns = pgTable(
     inputTokens: integer("input_tokens"),
     outputTokens: integer("output_tokens"),
     durationMs: integer("duration_ms"),
+    toolCallsJson: jsonb("tool_calls_json").$type<AgentToolCallAudit[]>().notNull().default([]),
+    estimatedCostMicrousd: integer("estimated_cost_microusd"),
     attempts: integer("attempts").notNull().default(0),
     errorCode: text("error_code"),
     errorDetailRedacted: text("error_detail_redacted"),
@@ -66,6 +68,7 @@ export const agentRuns = pgTable(
       .where(sql`${table.status} IN ('queued', 'running', 'validating')`),
     check("agent_runs_attempts_valid", sql`${table.attempts} >= 0`),
     check("agent_runs_tokens_valid", sql`(${table.inputTokens} IS NULL OR ${table.inputTokens} >= 0) AND (${table.outputTokens} IS NULL OR ${table.outputTokens} >= 0)`),
+    check("agent_runs_cost_valid", sql`${table.estimatedCostMicrousd} IS NULL OR ${table.estimatedCostMicrousd} >= 0`),
     index("agent_runs_user_created_idx").on(table.userId, table.createdAt),
   ],
 );
@@ -110,6 +113,7 @@ export const reviewClaims = pgTable(
     confidence: reviewConfidenceEnum("confidence").notNull(),
     status: reviewClaimStatusEnum("status").notNull(),
     userRevision: text("user_revision"),
+    correctionKind: text("correction_kind"),
     position: integer("position").notNull(),
     proposedDirectionJson: jsonb("proposed_direction_json").$type<{ name: string; relation: string } | null>(),
   },
@@ -120,6 +124,7 @@ export const reviewClaims = pgTable(
     unique("review_claims_review_position_unique").on(table.reviewVersionId, table.position),
     check("review_claims_text_valid", sql`length(btrim(${table.statement})) > 0 AND length(btrim(${table.rationale})) > 0`),
     check("review_claims_revision_valid", sql`(${table.status} = 'edited' AND ${table.userRevision} IS NOT NULL) OR (${table.status} <> 'edited')`),
+    check("review_claims_correction_kind_valid", sql`${table.correctionKind} IS NULL OR ${table.correctionKind} IN ('accurate', 'direction_name', 'wrong_association', 'maintenance', 'exploration', 'exclude_category', 'wrong')`),
   ],
 );
 
@@ -226,6 +231,8 @@ export const confirmedMemories = pgTable(
     status: confirmedMemoryStatusEnum("status").notNull(),
     revision: integer("revision").notNull().default(1),
     supersedesId: uuid("supersedes_id"),
+    reviewRequiredAt: timestamp("review_required_at", { withTimezone: true, mode: "date" }),
+    reviewRequiredReason: text("review_required_reason"),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
@@ -237,6 +244,24 @@ export const confirmedMemories = pgTable(
     unique("confirmed_memories_user_id_id_unique").on(table.userId, table.id),
     check("confirmed_memories_effective_valid", sql`${table.effectiveTo} IS NULL OR ${table.effectiveTo} >= ${table.effectiveFrom}`),
     index("confirmed_memories_user_status_effective_idx").on(table.userId, table.status, table.effectiveFrom),
+  ],
+);
+
+export const confirmedMemoryEvidenceDependencies = pgTable(
+  "confirmed_memory_evidence_dependencies",
+  {
+    id: entityId(),
+    userId: userIdColumn(),
+    memoryId: uuid("memory_id").notNull(),
+    entityType: evidenceEntityTypeEnum("entity_type").notNull(),
+    entityId: uuid("entity_id").notNull(),
+    invalidatedAt: timestamp("invalidated_at", { withTimezone: true, mode: "date" }),
+    createdAt: createdAtColumn(),
+  },
+  (table) => [
+    foreignKey({ columns: [table.userId, table.memoryId], foreignColumns: [confirmedMemories.userId, confirmedMemories.id], name: "memory_evidence_dependencies_memory_fk" }).onDelete("cascade"),
+    unique("memory_evidence_dependencies_unique").on(table.memoryId, table.entityType, table.entityId),
+    index("memory_evidence_dependencies_entity_idx").on(table.userId, table.entityType, table.entityId),
   ],
 );
 

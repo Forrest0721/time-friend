@@ -259,7 +259,7 @@ export function canonicalJson(value: unknown): string {
   throw new DomainError("INVALID_PERIOD", "事实输入包含不可序列化值");
 }
 
-function allocateEffectiveSecondsToPeriod(
+export function allocateEffectiveSecondsToPeriod(
   effectiveSeconds: number | null,
   segments: readonly { startMs: number; endMs: number }[],
   periodStartMs: number,

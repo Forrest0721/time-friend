@@ -1,0 +1,14 @@
+.git
+.github
+.next
+.wrangler
+apps/*/.next
+apps/*/dist
+dist
+node_modules
+output
+test-results
+*.tsbuildinfo
+**/.env
+**/.env.*
+!**/.env.example

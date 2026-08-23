@@ -9,6 +9,7 @@ import {
   serializerCompiler,
   validatorCompiler,
 } from "fastify-type-provider-zod";
+import { captureException, recordDuration, recordFailure } from "@time-friend/observability";
 
 import { installErrorHandler, problem } from "./plugins/errors.js";
 import { registerAccountRoutes } from "./routes/account.js";
@@ -17,6 +18,7 @@ import { registerSettingsRoutes } from "./routes/settings.js";
 import { registerTaskRoutes } from "./routes/tasks.js";
 import { registerTrajectoryFeedbackRoutes } from "./routes/trajectory-feedback.js";
 import { registerTrajectoryRoutes } from "./routes/trajectory.js";
+import { registerTelemetryRoutes } from "./routes/telemetry.js";
 import { ApiDependencies } from "./types.js";
 
 export interface CreateAppOptions {
@@ -34,6 +36,13 @@ export async function createApp(dependencies: ApiDependencies, options: CreateAp
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   app.decorateRequest("authenticatedUser", null);
+  app.addHook("onResponse", async (request, reply) => {
+    recordDuration("http.server", reply.elapsedTime, { method: request.method, route: request.routeOptions.url, status: reply.statusCode });
+  });
+  app.addHook("onError", async (request, reply, error) => {
+    recordFailure("http.request", { method: request.method, route: request.routeOptions.url, status: reply.statusCode });
+    captureException(error, { service: "api", route: request.routeOptions.url });
+  });
 
   await app.register(cookie, {
     hook: "onRequest",
@@ -98,6 +107,7 @@ export async function createApp(dependencies: ApiDependencies, options: CreateAp
   registerSettingsRoutes(app, dependencies);
   registerTrajectoryRoutes(app, dependencies);
   registerTrajectoryFeedbackRoutes(app, dependencies);
+  registerTelemetryRoutes(app, dependencies);
   await app.ready();
   return app;
 }

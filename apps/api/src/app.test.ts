@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const observabilitySpies = vi.hoisted(() => ({
+  captureException: vi.fn(),
+  recordDuration: vi.fn(),
+  recordFailure: vi.fn(),
+  recordProductEvent: vi.fn(),
+}));
+vi.mock("@time-friend/observability", () => observabilitySpies);
+
 import type {
   AgentRunRecord,
   CommitmentRecord,
@@ -41,6 +49,7 @@ const openApps: Array<Awaited<ReturnType<typeof createApp>>> = [];
 
 afterEach(async () => {
   await Promise.all(openApps.splice(0).map((app) => app.close()));
+  observabilitySpies.recordProductEvent.mockClear();
 });
 
 describe("task API", () => {
@@ -68,6 +77,47 @@ describe("task API", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+
+  it("accepts only privacy-safe allowlisted product telemetry", async () => {
+    const { app } = await setup();
+    const accepted = await app.inject({
+      method: "POST",
+      url: "/api/v1/telemetry/events",
+      headers: { "idempotency-key": "telemetry-001" },
+      payload: { name: "evidence_opened", context: "trajectory", entityType: "claim" },
+    });
+    const rejected = await app.inject({
+      method: "POST",
+      url: "/api/v1/telemetry/events",
+      headers: { "idempotency-key": "telemetry-002" },
+      payload: { name: "raw_task_content", context: "trajectory", content: "不应采集" },
+    });
+    const replay = await app.inject({
+      method: "POST",
+      url: "/api/v1/telemetry/events",
+      headers: { "idempotency-key": "telemetry-001" },
+      payload: { name: "evidence_opened", context: "trajectory", entityType: "claim" },
+    });
+
+    expect(accepted.statusCode).toBe(204);
+    expect(replay.statusCode).toBe(204);
+    expect(rejected.statusCode).toBe(400);
+    expect(rejected.json()).toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(observabilitySpies.recordProductEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("publishes the V1 correction, focus audit and telemetry routes in OpenAPI", async () => {
+    const { app } = await setup();
+    const document = app.swagger();
+
+    expect(Object.keys(document.paths ?? {})).toEqual(expect.arrayContaining([
+      "/api/v1/focus-sessions/{sessionId}/boundaries",
+      "/api/v1/focus-sessions/{sessionId}/progress",
+      "/api/v1/review-claims/{claimId}/correct",
+      "/api/v1/commitments/current",
+      "/api/v1/telemetry/events",
+    ]));
   });
 
   it("strictly rejects unknown fields before invoking the application service", async () => {
@@ -233,6 +283,43 @@ describe("task API", () => {
     );
   });
 
+  it("adds deferred feedback and corrects focus boundaries through audited commands", async () => {
+    const { app, execution, trajectory } = await setup();
+    const sessionId = "00000000-0000-7000-8000-000000000004";
+    const deferred = await app.inject({
+      method: "POST",
+      url: `/api/v1/focus-sessions/${sessionId}/progress`,
+      headers: { "idempotency-key": "focus-deferred-001" },
+      payload: { outcome: "progressed", note: "稍后补记", expectedRevision: 3 },
+    });
+    const corrected = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/focus-sessions/${sessionId}/boundaries`,
+      headers: { "idempotency-key": "focus-boundaries-001" },
+      payload: {
+        startedAt: "2026-08-18T08:01:00.000Z",
+        endedAt: "2026-08-18T08:24:00.000Z",
+        reason: "核对记录后修正",
+        expectedRevision: 3,
+      },
+    });
+
+    expect(deferred.statusCode).toBe(201);
+    expect(deferred.json()).toMatchObject({ progress: { outcome: "progressed" }, task: { id: ITEM_ID } });
+    expect(corrected.statusCode).toBe(200);
+    expect(execution.addDeferredFocusFeedback).toHaveBeenCalledWith(
+      USER_ID,
+      sessionId,
+      expect.objectContaining({ outcome: "progressed", expectedRevision: 3 }),
+    );
+    expect(execution.adjustFocusBoundaries).toHaveBeenCalledWith(
+      USER_ID,
+      sessionId,
+      expect.objectContaining({ reason: "核对记录后修正", expectedRevision: 3 }),
+    );
+    expect(trajectory.markSnapshotsContainingEntity).toHaveBeenCalledWith(USER_ID, "focus_session", sessionId);
+  });
+
   it("creates manual progress through the task timeline boundary", async () => {
     const { app, execution, trajectory } = await setup();
     const response = await app.inject({
@@ -330,6 +417,31 @@ describe("trajectory API", () => {
     });
   });
 
+  it("forwards a structured correction and returns its future effect", async () => {
+    const { app, trajectoryFeedback } = await setup();
+    vi.mocked(trajectoryFeedback.correctClaim).mockResolvedValue({
+      review: reviewViewFixture("edited"),
+      futureEffect: "未来相似内容默认归为维持事务。",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/v1/review-claims/${CLAIM_ID}/correct`,
+      headers: { "idempotency-key": "claim-correct-001" },
+      payload: { kind: "maintenance", detail: "例行发布工作" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      review: { claims: [{ status: "edited" }] },
+      futureEffect: "未来相似内容默认归为维持事务。",
+    });
+    expect(trajectoryFeedback.correctClaim).toHaveBeenCalledWith(USER_ID, CLAIM_ID, {
+      kind: "maintenance",
+      detail: "例行发布工作",
+    });
+  });
+
   it("removes a mistaken evidence association through an auditable correction", async () => {
     const { app, trajectoryFeedback } = await setup();
     const corrected = reviewViewFixture();
@@ -375,6 +487,17 @@ describe("trajectory API", () => {
     expect(commitment.statusCode).toBe(200);
     expect(commitment.json()).toMatchObject({ status: "confirmed", revision: 2, targetPeriodId: PERIOD_ID });
     expect(trajectoryFeedback.confirmCommitment).toHaveBeenCalledWith(USER_ID, COMMITMENT_ID, 1);
+  });
+
+  it("lists confirmed commitments for the current user week", async () => {
+    const { app, trajectoryFeedback } = await setup();
+    vi.mocked(trajectoryFeedback.listCurrentCommitments).mockResolvedValue([{ ...commitmentFixture(), status: "confirmed", targetPeriodId: PERIOD_ID }]);
+
+    const response = await app.inject({ method: "GET", url: "/api/v1/commitments/current" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ items: [{ title: "完成轨迹闭环", status: "confirmed" }] });
+    expect(trajectoryFeedback.listCurrentCommitments).toHaveBeenCalledWith(USER_ID);
   });
 
   it("updates a direction lifecycle through an explicit revisioned command", async () => {
@@ -558,6 +681,7 @@ function trajectoryReviewStub(): TrajectoryReviewApplication {
 
 function trajectoryFeedbackStub(): TrajectoryFeedbackApplication {
   return {
+    correctClaim: vi.fn(),
     decideClaim: vi.fn(),
     excludeEvidence: vi.fn(),
     confirmReview: vi.fn(),
@@ -566,6 +690,7 @@ function trajectoryFeedbackStub(): TrajectoryFeedbackApplication {
     deactivateMemory: vi.fn(),
     deleteMemory: vi.fn(),
     listDirections: vi.fn(async () => []),
+    listCurrentCommitments: vi.fn(async () => []),
     updateDirection: vi.fn(),
     createCommitment: vi.fn(),
     confirmCommitment: vi.fn(),
@@ -594,7 +719,16 @@ function executionStub(item: Item): ExecutionApplication {
     finishFocus: vi.fn(async () => ({ ...view, session: { ...view.session, state: "awaiting_feedback" as const, revision: 2 }, openSegment: null })),
     cancelFocus: vi.fn(async () => ({ ...view, session: { ...view.session, state: "canceled" as const, revision: 2 }, openSegment: null })),
     submitFocusFeedback: vi.fn(async () => ({ session: { ...view.session, state: "completed" as const, revision: 3 }, progress, task: item })),
+    addDeferredFocusFeedback: vi.fn(async () => ({ session: { ...view.session, state: "completed" as const, revision: 4 }, progress, task: item })),
     adjustFocusDuration: vi.fn(async () => ({ ...view.session, effectiveSeconds: 300, revision: 3 })),
+    adjustFocusBoundaries: vi.fn(async () => ({
+      ...view.session,
+      state: "completed" as const,
+      startedAt: "2026-08-18T08:01:00.000Z",
+      endedAt: "2026-08-18T08:24:00.000Z",
+      effectiveSeconds: 1_380,
+      revision: 4,
+    })),
     retargetFocus: vi.fn(async () => view.session),
     deleteFocus: vi.fn(async () => ({ ...view.session, deletedAt: "2026-08-18T08:30:00.000Z", revision: 2 })),
     createManualProgress: vi.fn(async () => progress),

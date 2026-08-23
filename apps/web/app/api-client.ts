@@ -24,10 +24,15 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   return await response.json() as T;
 }
 
-export function apiMutation<T>(path: string, method: "POST" | "PATCH" | "DELETE", body?: unknown): Promise<T> {
+export function apiMutation<T>(
+  path: string,
+  method: "POST" | "PATCH" | "DELETE",
+  body?: unknown,
+  options: { idempotencyKey?: string } = {},
+): Promise<T> {
   return apiRequest<T>(path, {
     method,
-    headers: { "idempotency-key": crypto.randomUUID() },
+    headers: { "idempotency-key": options.idempotencyKey ?? crypto.randomUUID() },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
 }

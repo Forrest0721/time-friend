@@ -15,6 +15,7 @@
   "dependencies": {
     "@openai/agents": "0.17.0",
     "@time-friend/domain": "workspace:*",
+    "@time-friend/observability": "workspace:*",
     "zod": "4.4.3"
   },
   "devDependencies": {

@@ -1,4 +1,5 @@
 import { v7 as uuidv7 } from "uuid";
+import pino from "pino";
 
 import { OpenAITrajectoryAgentRunner } from "@time-friend/agent";
 import {
@@ -21,10 +22,12 @@ import {
 
 import { loadWorkerConfiguration } from "./configuration.js";
 
-const { databaseURL, trajectoryModel } = loadWorkerConfiguration(process.env);
+const { databaseURL, trajectoryModel, trajectoryPricing } = loadWorkerConfiguration(process.env);
+const logger = pino({ name: "time-friend-worker" });
 const database = createDatabaseClient(databaseURL);
-const boss = createTimeFriendBoss(databaseURL);
+const boss = createTimeFriendBoss(databaseURL, (error) => logger.error({ err: { name: error.name, message: error.message } }, "pg-boss runtime error"));
 await startTimeFriendBoss(boss);
+logger.info("worker queues started");
 const transactions = new PostgresTransactionContext();
 
 const execution = new ExecutionService({
@@ -42,7 +45,7 @@ const trajectory = new TrajectoryService({
 const trajectoryReviews = new TrajectoryReviewService({
   snapshots: trajectory,
   store: new PostgresTrajectoryReviewStore(database.db, transactions),
-  runner: new OpenAITrajectoryAgentRunner({ model: trajectoryModel }),
+  runner: new OpenAITrajectoryAgentRunner({ model: trajectoryModel, pricing: trajectoryPricing }),
   clock: systemClock,
   ids: { next: uuidv7 },
   model: trajectoryModel,
@@ -67,6 +70,7 @@ async function close(): Promise<void> {
   closing = true;
   await boss.stop({ graceful: true, timeout: 30_000 });
   await database.close();
+  logger.info("worker stopped");
 }
 
 process.once("SIGTERM", () => void close());

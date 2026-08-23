@@ -23,6 +23,7 @@ import {
   ExecutionService,
   FocusDeadlineJob,
   TaskService,
+  TrajectoryFeedbackService,
   TrajectoryReviewService,
   TrajectoryService,
 } from "@time-friend/domain";
@@ -145,7 +146,7 @@ describe("pg-boss execution jobs", () => {
     expect(sessions[0]).toMatchObject({ state: "awaiting_feedback", revision: 2 });
   });
 
-  it("enqueues and processes a trajectory review through the transaction-bound queue", async () => {
+  it("carries a user correction through product memory into the next week's queued Agent run", async () => {
     const list = await tasks.createTaskList(USER_ID, { name: "产品" });
     const task = await tasks.createItem(USER_ID, {
       kind: "task",
@@ -162,16 +163,29 @@ describe("pg-boss execution jobs", () => {
       clock: { now: () => new Date(now) },
       ids: { next: randomUUID },
     });
+    let generation = 0;
     const runner: AgentRunner = {
-      async generateWeeklyReview() {
+      async generateWeeklyReview(input) {
+        generation += 1;
+        const memories = await input.tools.getConfirmedMemories();
+        if (generation === 1) expect(memories).toEqual([]);
+        if (generation === 2) {
+          expect(memories).toEqual([
+            expect.objectContaining({
+              memoryType: "classification",
+              value: expect.objectContaining({ classification: "maintenance" }),
+              revision: 1,
+            }),
+          ]);
+        }
         return {
           review: {
             schemaVersion: "1",
             claims: [
               {
                 type: "progress",
-                statement: "似乎在持续推进轨迹队列",
-                rationale: "任务与进展形成了连续证据",
+                statement: generation === 1 ? "似乎在持续推进轨迹队列" : "已继承用户确认的维持事务分类",
+                rationale: generation === 1 ? "任务与进展形成了连续证据" : "本周证据结合上一周用户确认的产品记忆",
                 confidence: "medium",
                 evidence: [{ entityType: "task", entityId: task.id, role: "supports" }],
                 proposedDirection: null,
@@ -189,13 +203,14 @@ describe("pg-boss execution jobs", () => {
         };
       },
     };
+    const reviewStore = new PostgresTrajectoryReviewStore(
+      database.db,
+      transactions,
+      new PgBossTrajectoryReviewJobScheduler(boss),
+    );
     const reviews = new TrajectoryReviewService({
       snapshots: trajectory,
-      store: new PostgresTrajectoryReviewStore(
-        database.db,
-        transactions,
-        new PgBossTrajectoryReviewJobScheduler(boss),
-      ),
+      store: reviewStore,
       runner,
       clock: { now: () => new Date(now) },
       ids: { next: randomUUID },
@@ -215,6 +230,38 @@ describe("pg-boss execution jobs", () => {
       return current?.status === "succeeded" ? current : null;
     });
     expect(completed).toMatchObject({ attempts: 1, sdkTraceId: "queue-trace" });
+
+    const firstReview = await reviews.getReviewForPeriod(USER_ID, period.id);
+    const feedback = new TrajectoryFeedbackService({
+      store: reviewStore,
+      periods: trajectory,
+      clock: { now: () => new Date(now) },
+      ids: { next: randomUUID },
+    });
+    const corrected = await feedback.correctClaim(USER_ID, firstReview!.claims[0]!.id, {
+      kind: "maintenance",
+      detail: "这是维持事务，不应被解释为方向推进",
+      remember: true,
+    });
+    expect(corrected.futureEffect).toContain("维持事务");
+    await feedback.confirmReview(USER_ID, firstReview!.review!.id);
+
+    now = new Date("2099-08-25T08:00:00.000Z");
+    for (let index = 0; index < 3; index += 1) {
+      await execution.createManualProgress(USER_ID, task.id, { outcome: "progressed", note: `第二周证据 ${index + 1}` });
+    }
+    now = new Date(now.getTime() + 1_000);
+    const nextPeriod = await trajectory.ensureCurrentWeek(USER_ID);
+    expect(nextPeriod.id).not.toBe(period.id);
+    const nextRun = await reviews.requestGeneration(USER_ID, nextPeriod.id);
+    expect(nextRun.status).toBe("queued");
+    await waitFor(async () => {
+      const current = await reviews.getRun(USER_ID, nextRun.id);
+      return current?.status === "succeeded" ? current : null;
+    });
+    const nextReview = await reviews.getReviewForPeriod(USER_ID, nextPeriod.id);
+    expect(nextReview?.claims[0]).toMatchObject({ statement: "已继承用户确认的维持事务分类" });
+    expect(generation).toBe(2);
   });
 
   it("enqueues account erasure in the freeze transaction and processes it asynchronously", async () => {

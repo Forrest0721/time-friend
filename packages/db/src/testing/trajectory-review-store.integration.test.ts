@@ -18,6 +18,7 @@ import { PostgresTrajectoryReviewStore, type TrajectoryReviewJobScheduler } from
 import { PostgresTrajectoryStore } from "../repositories/trajectory-store.js";
 import {
   agentRuns,
+  confirmedMemoryEvidenceDependencies,
   confirmedMemories,
   contributionEdges,
   directions,
@@ -120,7 +121,17 @@ describe("PostgresTrajectoryReviewStore", () => {
     expect(view?.claims).toHaveLength(1);
     expect(view?.claims[0]).toMatchObject({ statement: "似乎在持续推进轨迹功能", status: "pending" });
     expect(view?.claims[0]?.evidence).toEqual([
-      expect.objectContaining({ entityType: "task", entityId: TASK_A, role: "supports" }),
+      expect.objectContaining({
+        entityType: "task",
+        entityId: TASK_A,
+        role: "supports",
+        detail: expect.objectContaining({
+          title: "推进轨迹功能",
+          taskId: TASK_A,
+          listId: LIST_A,
+          metrics: { status: "pending", plannedOn: "2026-08-20" },
+        }),
+      }),
     ]);
     expect(view?.commitments).toHaveLength(1);
 
@@ -229,6 +240,134 @@ describe("PostgresTrajectoryReviewStore", () => {
 
     await feedback.deactivateMemory(USER_A, revised.id, 2);
     await expect(feedback.listMemories(USER_A, "active")).resolves.toEqual([]);
+  });
+
+  it("persists structured corrections as memory without inventing a direction", async () => {
+    await seedTask(true);
+    const period = await trajectory.ensureCurrentWeek(USER_A);
+    const run = await reviews.requestGeneration(USER_A, period.id);
+    const generated = await reviews.executeGeneration(run.id);
+    const claim = generated!.claims[0]!;
+
+    const corrected = await feedback.correctClaim(USER_A, claim.id, {
+      kind: "maintenance",
+      detail: "这是必要维护，不代表产品方向推进",
+      remember: true,
+    });
+
+    expect(corrected.futureEffect).toContain("维持事务");
+    expect(corrected.review.claims[0]).toMatchObject({
+      status: "edited",
+      correctionKind: "maintenance",
+      userRevision: "这是必要维护，不代表产品方向推进",
+      memoryCandidate: {
+        memoryType: "classification",
+        proposedValue: expect.objectContaining({ classification: "maintenance" }),
+        status: "pending",
+      },
+    });
+    await feedback.confirmReview(USER_A, generated!.review!.id);
+
+    expect(await client.db.select().from(directions)).toEqual([]);
+    expect(await feedback.listMemories(USER_A, "active")).toEqual([
+      expect.objectContaining({
+        memoryType: "classification",
+        value: expect.objectContaining({ classification: "maintenance" }),
+      }),
+    ]);
+    expect(await client.db.select().from(confirmedMemoryEvidenceDependencies)).toEqual([
+      expect.objectContaining({ userId: USER_A, entityType: "task", entityId: TASK_A, invalidatedAt: null }),
+    ]);
+  });
+
+  it("turns an explicitly remembered accurate claim into product memory even without an Agent candidate", async () => {
+    runner = {
+      generateWeeklyReview: vi.fn(async (input) => {
+        const result = await generateReview(input);
+        result.review.claims[0]!.memoryCandidate = null;
+        return result;
+      }),
+    };
+    reviews = new TrajectoryReviewService({
+      snapshots: trajectory,
+      store,
+      runner,
+      clock: { now: () => new Date("2026-08-22T08:00:00.000Z") },
+      ids: { next: randomUUID },
+      model: "test-model",
+    });
+    await seedTask(true);
+    const period = await trajectory.ensureCurrentWeek(USER_A);
+    const run = await reviews.requestGeneration(USER_A, period.id);
+    const generated = await reviews.executeGeneration(run.id);
+
+    await feedback.correctClaim(USER_A, generated!.claims[0]!.id, { kind: "accurate", remember: true });
+    await feedback.confirmReview(USER_A, generated!.review!.id);
+
+    expect(await feedback.listMemories(USER_A, "active")).toEqual([
+      expect.objectContaining({
+        memoryType: "preference",
+        value: expect.objectContaining({ correction: "accurate", statement: "似乎在持续推进轨迹功能" }),
+      }),
+    ]);
+  });
+
+  it("marks confirmed memory for review when its frozen source evidence changes", async () => {
+    await seedTask(true);
+    const period = await trajectory.ensureCurrentWeek(USER_A);
+    const run = await reviews.requestGeneration(USER_A, period.id);
+    const generated = await reviews.executeGeneration(run.id);
+    await feedback.decideClaim(USER_A, generated!.claims[0]!.id, { action: "accept", remember: true });
+    await feedback.confirmReview(USER_A, generated!.review!.id);
+
+    await expect(trajectory.markSnapshotsContainingEntity(USER_A, "task", TASK_A)).resolves.toBe(1);
+    const [memory] = await feedback.listMemories(USER_A, "active");
+    expect(memory).toMatchObject({ reviewRequiredReason: `task:${TASK_A} 已修改或删除` });
+    expect(memory!.reviewRequiredAt).not.toBeNull();
+    expect(await client.db.select().from(confirmedMemoryEvidenceDependencies)).toEqual([
+      expect.objectContaining({ userId: USER_A, entityType: "task", entityId: TASK_A, invalidatedAt: expect.any(Date) }),
+    ]);
+
+    const revised = await feedback.reviseMemory(USER_A, memory!.id, { summary: "证据变化后仍确认这条理解" }, memory!.revision);
+    expect(revised).toMatchObject({ revision: 2, reviewRequiredAt: null, reviewRequiredReason: null });
+    expect(await client.db.select().from(confirmedMemoryEvidenceDependencies)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ memoryId: memory!.id, invalidatedAt: expect.any(Date) }),
+      expect.objectContaining({ memoryId: revised.id, invalidatedAt: null }),
+    ]));
+  });
+
+  it("enforces at most three active commitments for one target week and lists them after rollover", async () => {
+    await seedTask(true);
+    const period = await trajectory.ensureCurrentWeek(USER_A);
+    const run = await reviews.requestGeneration(USER_A, period.id);
+    const generated = await reviews.executeGeneration(run.id);
+
+    const created = await Promise.all([
+      feedback.createCommitment(USER_A, generated!.review!.id, { title: "验证用户问题" }),
+      feedback.createCommitment(USER_A, generated!.review!.id, { title: "完成核心交互" }),
+      feedback.createCommitment(USER_A, generated!.review!.id, { title: "观察真实使用" }),
+    ]);
+    await expect(
+      feedback.createCommitment(USER_A, generated!.review!.id, { title: "超出上限" }),
+    ).rejects.toMatchObject({ code: "INVALID_RELATION" });
+    const paused = await feedback.setCommitmentStatus(USER_A, created[0]!.id, "paused", created[0]!.revision);
+    await expect(
+      feedback.confirmCommitment(USER_A, generated!.commitments[0]!.id, generated!.commitments[0]!.revision),
+    ).rejects.toMatchObject({ code: "INVALID_RELATION" });
+
+    const afterRollover = new TrajectoryFeedbackService({
+      store,
+      periods: trajectory,
+      clock: { now: () => new Date("2026-08-25T08:00:00.000Z") },
+      ids: { next: randomUUID },
+    });
+    await expect(afterRollover.listCurrentCommitments(USER_A)).resolves.toEqual(
+      [...created].sort((left, right) => left.position - right.position).map((entry) => expect.objectContaining({
+        id: entry.id,
+        status: entry.id === paused.id ? "paused" : "confirmed",
+        targetPeriodId: entry.targetPeriodId,
+      })),
+    );
   });
 
   it("preserves an excluded evidence reference and optionally teaches the Agent an exclusion rule", async () => {

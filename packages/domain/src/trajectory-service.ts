@@ -33,6 +33,7 @@ export interface SnapshotEvidenceDocument {
   occurredAt: string;
   taskId: string | null;
   listId: string | null;
+  metrics: Record<string, unknown>;
 }
 
 export type LoadedPeriodFactsInput = Omit<PeriodFactsInput, "period" | "sourceWatermark"> & {

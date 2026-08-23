@@ -62,7 +62,9 @@ export type ExecutionApplication = Pick<
   | "finishFocus"
   | "cancelFocus"
   | "submitFocusFeedback"
+  | "addDeferredFocusFeedback"
   | "adjustFocusDuration"
+  | "adjustFocusBoundaries"
   | "retargetFocus"
   | "deleteFocus"
   | "createManualProgress"
@@ -88,6 +90,7 @@ export type TrajectoryReviewApplication = Pick<
 export type TrajectoryFeedbackApplication = Pick<
   TrajectoryFeedbackService,
   | "decideClaim"
+  | "correctClaim"
   | "excludeEvidence"
   | "confirmReview"
   | "listMemories"
@@ -97,6 +100,7 @@ export type TrajectoryFeedbackApplication = Pick<
   | "listDirections"
   | "updateDirection"
   | "createCommitment"
+  | "listCurrentCommitments"
   | "confirmCommitment"
   | "updateCommitment"
   | "setCommitmentStatus"

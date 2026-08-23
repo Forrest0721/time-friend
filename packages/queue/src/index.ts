@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import type { AccountDeletionJobScheduler, ExecutionJobScheduler, TimeFriendTransaction, TrajectoryReviewJobScheduler } from "@time-friend/db";
 import type { AccountPrivacyService, ExecutionService, FocusDeadlineJob, TrajectoryReviewService, WeeklyReviewSchedulerService } from "@time-friend/domain";
+import { captureException, recordDuration, recordFailure, withSpan } from "@time-friend/observability";
 
 export const POMODORO_EXPIRE_QUEUE = "pomodoro.expire";
 export const STOPWATCH_CAP_QUEUE = "focus.cap-stopwatch";
@@ -22,10 +23,12 @@ const trajectoryReviewDataSchema = z.strictObject({
 });
 const accountDeletionDataSchema = z.strictObject({ requestId: z.uuid() });
 
-export function createTimeFriendBoss(connectionString: string): PgBoss {
+export function createTimeFriendBoss(connectionString: string, onError?: (error: Error) => void): PgBoss {
   const boss = new PgBoss({ connectionString, application_name: "time-friend-jobs" });
   boss.on("error", (error) => {
-    console.error("pg-boss error", { name: error.name, message: error.message });
+    onError?.(error);
+    recordFailure("queue.runtime", { queue: "pg-boss", errorType: error.name });
+    captureException(error, { service: "worker", component: "pg-boss" });
   });
   return boss;
 }
@@ -117,13 +120,13 @@ export async function registerExecutionWorkers(boss: PgBoss, execution: Executio
   await boss.work(POMODORO_EXPIRE_QUEUE, { batchSize: 10 }, async (jobs) => {
     for (const job of jobs) {
       const data = focusDeadlineDataSchema.parse(job.data);
-      await execution.expirePomodoro(data.userId, data.sessionId, data.expectedRevision);
+      await observeJob(POMODORO_EXPIRE_QUEUE, () => execution.expirePomodoro(data.userId, data.sessionId, data.expectedRevision));
     }
   });
   await boss.work(STOPWATCH_CAP_QUEUE, { batchSize: 10 }, async (jobs) => {
     for (const job of jobs) {
       const data = focusDeadlineDataSchema.parse(job.data);
-      await execution.capStopwatch(data.userId, data.sessionId, data.expectedRevision);
+      await observeJob(STOPWATCH_CAP_QUEUE, () => execution.capStopwatch(data.userId, data.sessionId, data.expectedRevision));
     }
   });
 }
@@ -136,12 +139,12 @@ export async function registerTrajectoryWorkers(
   await boss.work(TRAJECTORY_GENERATE_REVIEW_QUEUE, { batchSize: 2 }, async (jobs) => {
     for (const job of jobs) {
       const { runId } = trajectoryReviewDataSchema.parse(job.data);
-      await trajectoryReviews.executeGeneration(runId);
+      await observeJob(TRAJECTORY_GENERATE_REVIEW_QUEUE, () => trajectoryReviews.executeGeneration(runId));
     }
   });
   if (weeklyScheduler) {
     await boss.work(TRAJECTORY_SCHEDULE_WEEKS_QUEUE, { batchSize: 1 }, async () => {
-      await weeklyScheduler.scheduleEndedWeeks();
+      await observeJob(TRAJECTORY_SCHEDULE_WEEKS_QUEUE, () => weeklyScheduler.scheduleEndedWeeks());
     });
     await boss.schedule(TRAJECTORY_SCHEDULE_WEEKS_QUEUE, "*/15 * * * *", null, { tz: "UTC" });
   }
@@ -151,7 +154,20 @@ export async function registerPrivacyWorkers(boss: PgBoss, privacy: AccountPriva
   await boss.work(ACCOUNT_DELETE_QUEUE, { batchSize: 2 }, async (jobs) => {
     for (const job of jobs) {
       const { requestId } = accountDeletionDataSchema.parse(job.data);
-      await privacy.executeDeletion(requestId);
+      await observeJob(ACCOUNT_DELETE_QUEUE, () => privacy.executeDeletion(requestId));
     }
   });
+}
+
+async function observeJob<T>(queue: string, work: () => Promise<T>): Promise<T> {
+  const startedAt = Date.now();
+  try {
+    return await withSpan("queue.job", { queue }, work);
+  } catch (error) {
+    recordFailure("queue.job", { queue });
+    captureException(error, { service: "worker", queue });
+    throw error;
+  } finally {
+    recordDuration("queue.job", Date.now() - startedAt, { queue });
+  }
 }

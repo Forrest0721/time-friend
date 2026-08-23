@@ -11,6 +11,7 @@ import {
   accountDeletionRequests,
   agentRuns,
   confirmedMemories,
+  confirmedMemoryEvidenceDependencies,
   contributionEdges,
   directions,
   evidenceRefs,
@@ -73,6 +74,7 @@ export class PostgresAccountPrivacyStore implements AccountPrivacyStore {
       commitmentRows,
       directionRows,
       memoryRows,
+      memoryDependencyRows,
       edgeRows,
     ] = await Promise.all([
       this.database.select().from(folders).where(eq(folders.userId, userId)),
@@ -95,6 +97,7 @@ export class PostgresAccountPrivacyStore implements AccountPrivacyStore {
       this.database.select().from(nextPeriodCommitments).where(eq(nextPeriodCommitments.userId, userId)),
       this.database.select().from(directions).where(eq(directions.userId, userId)),
       this.database.select().from(confirmedMemories).where(eq(confirmedMemories.userId, userId)),
+      this.database.select().from(confirmedMemoryEvidenceDependencies).where(eq(confirmedMemoryEvidenceDependencies.userId, userId)),
       this.database.select().from(contributionEdges).where(eq(contributionEdges.userId, userId)),
     ]);
     return {
@@ -131,6 +134,7 @@ export class PostgresAccountPrivacyStore implements AccountPrivacyStore {
         nextPeriodCommitments: commitmentRows,
         directions: directionRows,
         confirmedMemories: memoryRows,
+        confirmedMemoryEvidenceDependencies: memoryDependencyRows,
         contributionEdges: edgeRows,
       },
     };

@@ -1,0 +1,1 @@
+ALTER TABLE "snapshot_evidence" ADD COLUMN "metrics_json" jsonb DEFAULT '{}'::jsonb NOT NULL;
