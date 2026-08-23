@@ -39,6 +39,7 @@ import {
   registerPrivacyWorkers,
   registerTrajectoryWorkers,
   startTimeFriendBoss,
+  STOPWATCH_CAP_QUEUE,
   TRAJECTORY_GENERATE_REVIEW_QUEUE,
 } from "./index.js";
 import { accountDeletionRequests, users } from "@time-friend/db/schema";
@@ -61,9 +62,25 @@ describe("pg-boss execution jobs", () => {
     await migrate(database.db, { migrationsFolder: new URL("../../db/migrations", import.meta.url).pathname });
     boss = createTimeFriendBoss(container.getConnectionUri());
     await startTimeFriendBoss(boss);
+  });
+
+  beforeEach(async () => {
+    await Promise.all([
+      boss.offWork(POMODORO_EXPIRE_QUEUE),
+      boss.offWork(STOPWATCH_CAP_QUEUE),
+      boss.offWork(TRAJECTORY_GENERATE_REVIEW_QUEUE),
+      boss.offWork(ACCOUNT_DELETE_QUEUE),
+    ]);
+    await boss.deleteAllJobs();
+    await database.db.execute(
+      sql`TRUNCATE TABLE account_deletion_requests, progress_entries, focus_adjustments, focus_segments, focus_sessions, idempotency_records, task_events, items, groups, lists, folders, users CASCADE`,
+    );
+    await database.db.execute(
+      sql`INSERT INTO users (id, email, name) VALUES (${USER_ID}::uuid, 'queue@example.com', 'Queue')`,
+    );
+    now = new Date("2099-08-22T08:00:00.000Z");
     scheduler = new PgBossExecutionJobScheduler(boss);
     transactions = new PostgresTransactionContext();
-    now = new Date("2099-08-22T08:00:00.000Z");
     tasks = new TaskService({
       store: new PostgresTaskStore(database.db, transactions),
       clock: { now: () => new Date(now) },
@@ -75,17 +92,6 @@ describe("pg-boss execution jobs", () => {
       ids: { next: randomUUID },
     });
     await registerExecutionWorkers(boss, execution);
-  });
-
-  beforeEach(async () => {
-    await boss.deleteAllJobs();
-    await database.db.execute(
-      sql`TRUNCATE TABLE account_deletion_requests, progress_entries, focus_adjustments, focus_segments, focus_sessions, idempotency_records, task_events, items, groups, lists, folders, users CASCADE`,
-    );
-    await database.db.execute(
-      sql`INSERT INTO users (id, email, name) VALUES (${USER_ID}::uuid, 'queue@example.com', 'Queue')`,
-    );
-    now = new Date("2099-08-22T08:00:00.000Z");
   });
 
   afterAll(async () => {
