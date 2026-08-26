@@ -46,7 +46,7 @@ flowchart LR
 | 后台任务 | pg-boss | 直接使用 PostgreSQL，支持事务内入队、定时、重试和死信，无需 Redis |
 | 身份认证 | Better Auth + PostgreSQL session | 开源、数据库会话可撤销，并有 Drizzle 适配器 |
 | Agent | `@openai/agents` TypeScript SDK | 开源、工具/结构化输出/Guardrail/Tracing/HITL 能力完整 |
-| Agent API | OpenAI Responses API，模型配置化 | 支持 Agent 工作流；业务代码不硬编码模型名称 |
+| Agent API | Responses API；OpenAI / DeepSeek 显式 Provider | 保持工作流中立；业务代码不硬编码供应商或模型名称 |
 | 可观测性 | OpenTelemetry + Pino + Sentry | 串联 Web、API、Worker 和 Agent run |
 | 测试 | Vitest、Testcontainers、Playwright、Agent evals | 覆盖领域逻辑、数据库约束、端到端闭环和模型回归 |
 
@@ -76,8 +76,10 @@ flowchart TB
     A --> Q["pg-boss jobs"]
     R["apps/worker"] --> Q
     R --> P
-    R --> S["OpenAI Agents SDK"]
-    S --> O["OpenAI Responses API"]
+    R --> S["TrajectoryAgentRunner · OpenAI Agents SDK"]
+    S --> G["Provider Registry"]
+    G --> O["OpenAI Responses API"]
+    G --> D["DeepSeek Responses API"]
     A --> T["SSE：Agent 状态"]
     T --> W
 ```
@@ -815,7 +817,7 @@ type WeeklyTrajectoryView = {
 
 pg-boss 基于 PostgreSQL `SKIP LOCKED`，并提供事务内入队、定时、自动重试等能力。[pg-boss](https://github.com/timgit/pg-boss)
 
-队列语义不能替代业务幂等。所有 handler 仍以业务唯一键、输入哈希和状态条件更新保证可重入；尤其 OpenAI 外部调用与数据库提交之间无法共享事务，重试时必须优先复用已成功的 `agent_run`，不能重复写 review。
+队列语义不能替代业务幂等。所有 handler 仍以业务唯一键、输入哈希和状态条件更新保证可重入；尤其模型 Provider 外部调用与数据库提交之间无法共享事务，重试时必须优先复用目标完全一致且已成功的 `agent_run`，不能重复写 review。
 
 ### 10.2 Job 类型
 
@@ -847,20 +849,24 @@ pg-boss 基于 PostgreSQL `SKIP LOCKED`，并提供事务内入队、定时、�
 
 ```ts
 interface AgentRunner {
-  generateWeeklyReview(input: GenerateWeeklyReviewInput):
-    Promise<GeneratedReview>;
+  generateWeeklyReview(
+    input: GenerateWeeklyReviewInput,
+    target: AgentRunTarget,
+  ): Promise<GeneratedReviewResult>;
 }
 
-interface ModelGateway {
-  getModel(workload: 'weekly-review'): ModelSelection;
-}
+type TrajectoryProvider = 'openai' | 'deepseek';
 
-interface TraceSink {
-  record(run: AgentRunTelemetry): Promise<void>;
+interface AgentRunTarget {
+  provider: TrajectoryProvider;
+  model: string;
+  transport: 'responses';
+  configVersion: 1;
+  configHash: string;
 }
 ```
 
-只有 `packages/agent/openai` 依赖 `@openai/agents`。未来替换 SDK 或增加模型供应商时，领域服务不变。
+只有 `packages/agent` 依赖 `@openai/agents` 和供应商客户端。领域层只认识目标和运行结果；API 创建 run 时固化目标，Worker 执行时根据该目标从 Registry 解析 Provider。Runner 返回的 Provider 或模型与固化目标不一致时，以 `AGENT_TARGET_MISMATCH` 永久失败。
 
 ### 11.2 V1 Agent 定义
 
@@ -871,10 +877,21 @@ interface TraceSink {
 - 工具全部只读；
 - 每次工具调用有超时和最大返回条数；
 - 输出最多 5 条 claim、3 条 commitment suggestion；
-- 模型从 `TRAJECTORY_MODEL` 配置读取；
+- Provider 与模型从 `TRAJECTORY_PROVIDER`、`TRAJECTORY_MODEL` 配置读取；
 - prompt、工具和 schema 分别版本化。
 
 OpenAI Agents SDK 支持 Zod `outputType`、Zod 参数的严格工具 schema、输出/工具 Guardrail 与完整 tracing，适合这一工作流。[Agents](https://openai.github.io/openai-agents-js/guides/agents/)、[Tools](https://openai.github.io/openai-agents-js/guides/tools/)、[Results](https://openai.github.io/openai-agents-js/guides/results/)
+
+### 11.2.1 Provider Registry
+
+- OpenAI 与 DeepSeek 都通过显式 `OpenAIProvider` 注入 Runner，不修改 SDK 全局默认 Provider；
+- 客户端统一 `timeout=120000`、`maxRetries=0`、`useResponses=true`、关闭 WebSocket；
+- DeepSeek V1 只允许 `deepseek-v4-pro`、`deepseek-v4-flash` 和官方 HTTPS endpoint；
+- Provider 密钥只在 Worker 环境中，API 只持有非敏感目标；
+- 不做跨 Provider 自动回退；队列最多 3 次指数退避，永久错误不重试；
+- Worker 退出时关闭所有 Provider 客户端。
+
+新任务使用当前平台配置，已排队任务使用创建时保存在 `agent_runs` 的目标。成功 run 的复用键为 `userId + workflowVersion + inputHash + provider + model + modelConfigHash`；相同周期换 Provider 会形成新的 run 和复盘版本，旧版本保留为历史。
 
 ### 11.3 Agent 输出 Schema
 
@@ -1004,6 +1021,8 @@ V1 Agent 工具全部只读，因此 Agent run 内不需要工具审批中断。
 - 完整输入/输出只存自己的加密数据库，按访问权限读取；
 - 自定义 TraceProcessor 将 trace ID 关联到 OpenTelemetry；
 - 生产日志不打印任务正文、笔记和进展原文。
+
+OpenAI run 保留禁用敏感数据的 SDK trace；DeepSeek run 完全关闭 OpenAI SDK tracing，`sdkTraceId=null`，只进入本地 OpenTelemetry。Provider 原始错误正文、Authorization header 和密钥不得持久化或输出到日志。
 
 SDK tracing 会记录模型生成、工具调用、Guardrail 和 Handoff 等事件，适合调试 Agent workflow，但敏感内容必须显式关闭或裁剪。[Agents SDK Tracing](https://openai.github.io/openai-agents-js/guides/tracing/)
 
@@ -1228,7 +1247,7 @@ Migration 使用 expand/contract，不在同一发布中删除仍被旧版本读
 
 | 故障 | 用户体验 | 系统策略 |
 |---|---|---|
-| OpenAI API 不可用 | 任务和计时正常，轨迹显示稍后重试 | pg-boss 退避重试，超过上限进入死信 |
+| 当前模型 Provider 不可用 | 任务和计时正常，轨迹显示稍后重试 | pg-boss 最多 3 次退避；不自动跨 Provider 回退 |
 | Worker 停止 | 任务和计时 API 正常，轨迹生成延迟 | 恢复后消费积压 job |
 | Agent 输出无效 | 不展示错误 claim | Guardrail 拦截，保留 run 诊断 |
 | SSE 断开 | 生成页退化为轮询 | 2/5/10 秒退避 |
@@ -1335,6 +1354,7 @@ V1 设计目标：
 6. `ADR-006-agent-sdk-boundary.md`：Agent SDK 与业务边界；
 7. `ADR-007-no-vector-search-v1.md`：推迟向量检索的条件；
 8. `ADR-008-product-memory.md`：长期记忆为何独立于 SDK Session。
+9. `ADR-009-multi-provider-agent-runtime.md`：OpenAI Agents SDK 下的 OpenAI / DeepSeek 显式 Provider 边界。
 
 ## 21. 仍需产品确认的技术影响项
 

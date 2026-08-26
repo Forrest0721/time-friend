@@ -10,12 +10,14 @@
     "build": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
     "test": "vitest run --config vitest.config.ts",
+    "test:live": "RUN_LIVE_AGENT_EVALS=1 vitest run --config vitest.config.ts src/evals/live-regression.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@openai/agents": "0.17.0",
     "@time-friend/domain": "workspace:*",
     "@time-friend/observability": "workspace:*",
+    "openai": "7.5.0",
     "zod": "4.4.3"
   },
   "devDependencies": {

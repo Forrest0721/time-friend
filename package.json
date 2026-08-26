@@ -14,6 +14,7 @@
     "site:build": "vite build",
     "test": "pnpm run test:unit && pnpm run test:e2e",
     "test:unit": "pnpm -r --parallel run test",
+    "test:agent-live": "pnpm --filter @time-friend/agent run test:live",
     "test:e2e": "playwright test",
     "lint": "eslint apps packages tests playwright.config.ts --ext .ts,.tsx",
     "typecheck": "pnpm -r --parallel run typecheck && tsc --project tests/e2e/tsconfig.json",

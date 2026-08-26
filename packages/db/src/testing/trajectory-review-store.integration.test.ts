@@ -7,6 +7,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 
 import {
   type AgentRunner,
+  type AgentRunTarget,
   type GeneratedReviewResult,
   TrajectoryFeedbackService,
   TrajectoryReviewService,
@@ -37,6 +38,20 @@ const LIST_A = "00000000-0000-7000-8000-000000000011";
 const LIST_B = "00000000-0000-7000-8000-000000000012";
 const TASK_A = "00000000-0000-7000-8000-000000000021";
 const TASK_B = "00000000-0000-7000-8000-000000000022";
+const TEST_TARGET: AgentRunTarget = {
+  provider: "openai",
+  model: "test-model",
+  transport: "responses",
+  configVersion: 1,
+  configHash: "b".repeat(64),
+};
+const DEEPSEEK_TARGET: AgentRunTarget = {
+  provider: "deepseek",
+  model: "deepseek-v4-pro",
+  transport: "responses",
+  configVersion: 1,
+  configHash: "c".repeat(64),
+};
 
 describe("PostgresTrajectoryReviewStore", () => {
   let container: StartedPostgreSqlContainer;
@@ -76,10 +91,9 @@ describe("PostgresTrajectoryReviewStore", () => {
     reviews = new TrajectoryReviewService({
       snapshots: trajectory,
       store,
-      runner,
       clock: { now: () => new Date("2026-08-22T08:00:00.000Z") },
       ids: { next: randomUUID },
-      model: "test-model",
+      target: TEST_TARGET,
     });
     feedback = new TrajectoryFeedbackService({
       store,
@@ -114,7 +128,7 @@ describe("PostgresTrajectoryReviewStore", () => {
 
     expect(run.status).toBe("queued");
     expect(scheduledRunIds).toEqual([run.id]);
-    const view = await reviews.executeGeneration(run.id);
+    const view = await reviews.executeGeneration(run.id, runner);
 
     expect(view?.run).toMatchObject({ status: "succeeded", attempts: 1, sdkTraceId: "trace-test" });
     expect(view?.review).toMatchObject({ periodId: period.id, version: 1, status: "pending" });
@@ -141,13 +155,61 @@ describe("PostgresTrajectoryReviewStore", () => {
     await expect(reviews.getReviewForPeriod(USER_B, period.id)).resolves.toBeNull();
   });
 
+  it("creates a new run and review version when the platform Provider target changes", async () => {
+    await seedTask(true);
+    const period = await trajectory.ensureCurrentWeek(USER_A);
+    const openAIRun = await reviews.requestGeneration(USER_A, period.id);
+    const deepSeekReviews = new TrajectoryReviewService({
+      snapshots: trajectory,
+      store,
+      clock: { now: () => new Date("2026-08-22T08:02:00.000Z") },
+      ids: { next: randomUUID },
+      target: DEEPSEEK_TARGET,
+    });
+    const deepSeekRunner: AgentRunner = {
+      generateWeeklyReview: vi.fn(async (input) => ({
+        ...(await generateReview(input)),
+        provider: "deepseek" as const,
+        model: "deepseek-v4-pro",
+        sdkTraceId: null,
+      })),
+    };
+
+    const whileOpenAIIsActive = await deepSeekReviews.requestGeneration(USER_A, period.id);
+    expect(whileOpenAIIsActive).toMatchObject({ id: openAIRun.id, provider: "openai", status: "queued" });
+    expect(scheduledRunIds).toEqual([openAIRun.id]);
+
+    const openAIReview = await reviews.executeGeneration(openAIRun.id, runner);
+
+    const deepSeekRun = await deepSeekReviews.requestGeneration(USER_A, period.id);
+    expect(deepSeekRun).toMatchObject({
+      provider: "deepseek",
+      model: "deepseek-v4-pro",
+      modelConfig: { transport: "responses", configVersion: 1 },
+      modelConfigHash: DEEPSEEK_TARGET.configHash,
+      status: "queued",
+    });
+    expect(deepSeekRun.id).not.toBe(openAIRun.id);
+    expect(scheduledRunIds).toEqual([openAIRun.id, deepSeekRun.id]);
+
+    const deepSeekReview = await deepSeekReviews.executeGeneration(deepSeekRun.id, deepSeekRunner);
+    expect(deepSeekReview?.review).toMatchObject({ version: 2, status: "pending" });
+    expect(deepSeekReview?.run).toMatchObject({ provider: "deepseek", sdkTraceId: null, status: "succeeded" });
+    expect(openAIReview?.review?.id).not.toBe(deepSeekReview?.review?.id);
+    await expect(reviews.getRun(USER_A, openAIRun.id)).resolves.toMatchObject({ status: "succeeded", provider: "openai" });
+    await expect(client.db.select().from(reviewVersions)).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: openAIReview?.review?.id, version: 1, status: "superseded" }),
+      expect.objectContaining({ id: deepSeekReview?.review?.id, version: 2, status: "pending" }),
+    ]));
+  });
+
   it("fails a queued run without invoking the model after Agent analysis is disabled", async () => {
     await seedTask(true);
     const period = await trajectory.ensureCurrentWeek(USER_A);
     const run = await reviews.requestGeneration(USER_A, period.id);
     await client.db.update(users).set({ agentEnabled: false }).where(sql`${users.id} = ${USER_A}`);
 
-    await expect(reviews.executeGeneration(run.id)).resolves.toBeNull();
+    await expect(reviews.executeGeneration(run.id, runner)).resolves.toBeNull();
     expect(runner.generateWeeklyReview).not.toHaveBeenCalled();
     await expect(reviews.getRun(USER_A, run.id)).resolves.toMatchObject({
       status: "failed",
@@ -182,15 +244,14 @@ describe("PostgresTrajectoryReviewStore", () => {
     reviews = new TrajectoryReviewService({
       snapshots: trajectory,
       store: new PostgresTrajectoryReviewStore(client.db, new PostgresTransactionContext()),
-      runner,
       clock: { now: () => new Date("2026-08-22T08:00:00.000Z") },
       ids: { next: randomUUID },
-      model: "test-model",
+      target: TEST_TARGET,
     });
     const period = await trajectory.ensureCurrentWeek(USER_A);
     const run = await reviews.requestGeneration(USER_A, period.id);
 
-    await expect(reviews.executeGeneration(run.id)).rejects.toThrow("TRAJECTORY_EVIDENCE_SCOPE_VIOLATION");
+    await expect(reviews.executeGeneration(run.id, runner)).resolves.toBeNull();
     await expect(reviews.getRun(USER_A, run.id)).resolves.toMatchObject({
       status: "failed",
       errorCode: "TRAJECTORY_EVIDENCE_SCOPE_VIOLATION",
@@ -203,7 +264,7 @@ describe("PostgresTrajectoryReviewStore", () => {
     await seedTask(true);
     const period = await trajectory.ensureCurrentWeek(USER_A);
     const run = await reviews.requestGeneration(USER_A, period.id);
-    const generated = await reviews.executeGeneration(run.id);
+    const generated = await reviews.executeGeneration(run.id, runner);
     const claim = generated!.claims[0]!;
 
     await feedback.decideClaim(USER_A, claim.id, { action: "accept", remember: true });
@@ -246,7 +307,7 @@ describe("PostgresTrajectoryReviewStore", () => {
     await seedTask(true);
     const period = await trajectory.ensureCurrentWeek(USER_A);
     const run = await reviews.requestGeneration(USER_A, period.id);
-    const generated = await reviews.executeGeneration(run.id);
+    const generated = await reviews.executeGeneration(run.id, runner);
     const claim = generated!.claims[0]!;
 
     const corrected = await feedback.correctClaim(USER_A, claim.id, {
@@ -291,15 +352,14 @@ describe("PostgresTrajectoryReviewStore", () => {
     reviews = new TrajectoryReviewService({
       snapshots: trajectory,
       store,
-      runner,
       clock: { now: () => new Date("2026-08-22T08:00:00.000Z") },
       ids: { next: randomUUID },
-      model: "test-model",
+      target: TEST_TARGET,
     });
     await seedTask(true);
     const period = await trajectory.ensureCurrentWeek(USER_A);
     const run = await reviews.requestGeneration(USER_A, period.id);
-    const generated = await reviews.executeGeneration(run.id);
+    const generated = await reviews.executeGeneration(run.id, runner);
 
     await feedback.correctClaim(USER_A, generated!.claims[0]!.id, { kind: "accurate", remember: true });
     await feedback.confirmReview(USER_A, generated!.review!.id);
@@ -316,7 +376,7 @@ describe("PostgresTrajectoryReviewStore", () => {
     await seedTask(true);
     const period = await trajectory.ensureCurrentWeek(USER_A);
     const run = await reviews.requestGeneration(USER_A, period.id);
-    const generated = await reviews.executeGeneration(run.id);
+    const generated = await reviews.executeGeneration(run.id, runner);
     await feedback.decideClaim(USER_A, generated!.claims[0]!.id, { action: "accept", remember: true });
     await feedback.confirmReview(USER_A, generated!.review!.id);
 
@@ -340,7 +400,7 @@ describe("PostgresTrajectoryReviewStore", () => {
     await seedTask(true);
     const period = await trajectory.ensureCurrentWeek(USER_A);
     const run = await reviews.requestGeneration(USER_A, period.id);
-    const generated = await reviews.executeGeneration(run.id);
+    const generated = await reviews.executeGeneration(run.id, runner);
 
     const created = await Promise.all([
       feedback.createCommitment(USER_A, generated!.review!.id, { title: "验证用户问题" }),
@@ -374,7 +434,7 @@ describe("PostgresTrajectoryReviewStore", () => {
     await seedTask(true);
     const period = await trajectory.ensureCurrentWeek(USER_A);
     const run = await reviews.requestGeneration(USER_A, period.id);
-    const generated = await reviews.executeGeneration(run.id);
+    const generated = await reviews.executeGeneration(run.id, runner);
     const claim = generated!.claims[0]!;
     const evidence = claim.evidence[0]!;
 
@@ -403,7 +463,7 @@ describe("PostgresTrajectoryReviewStore", () => {
     await seedTask(true);
     const period = await trajectory.ensureCurrentWeek(USER_A);
     const run = await reviews.requestGeneration(USER_A, period.id);
-    const generated = await reviews.executeGeneration(run.id);
+    const generated = await reviews.executeGeneration(run.id, runner);
     await feedback.decideClaim(USER_A, generated!.claims[0]!.id, { action: "accept", remember: true });
     await feedback.confirmReview(USER_A, generated!.review!.id);
     const [direction] = await feedback.listDirections(USER_A, "active");

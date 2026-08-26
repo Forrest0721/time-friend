@@ -1,7 +1,7 @@
 import { v7 as uuidv7 } from "uuid";
 import pino from "pino";
 
-import { OpenAITrajectoryAgentRunner } from "@time-friend/agent";
+import { createTrajectoryProviderRegistry, TrajectoryAgentRunner } from "@time-friend/agent";
 import {
   createDatabaseClient,
   PostgresAccountPrivacyStore,
@@ -19,11 +19,15 @@ import {
   registerTrajectoryWorkers,
   startTimeFriendBoss,
 } from "@time-friend/queue";
+import { recordFailure } from "@time-friend/observability";
 
 import { loadWorkerConfiguration } from "./configuration.js";
 
-const { databaseURL, trajectoryModel, trajectoryPricing } = loadWorkerConfiguration(process.env);
+const { databaseURL, trajectoryTarget, providerRuntime } = loadWorkerConfiguration(process.env);
 const logger = pino({ name: "time-friend-worker" });
+const providers = createTrajectoryProviderRegistry(providerRuntime);
+providers.resolve(trajectoryTarget);
+const trajectoryRunner = new TrajectoryAgentRunner({ providers, requestTimeoutMs: providerRuntime.requestTimeoutMs });
 const database = createDatabaseClient(databaseURL);
 const boss = createTimeFriendBoss(databaseURL, (error) => logger.error({ err: { name: error.name, message: error.message } }, "pg-boss runtime error"));
 await startTimeFriendBoss(boss);
@@ -45,10 +49,10 @@ const trajectory = new TrajectoryService({
 const trajectoryReviews = new TrajectoryReviewService({
   snapshots: trajectory,
   store: new PostgresTrajectoryReviewStore(database.db, transactions),
-  runner: new OpenAITrajectoryAgentRunner({ model: trajectoryModel, pricing: trajectoryPricing }),
   clock: systemClock,
   ids: { next: uuidv7 },
-  model: trajectoryModel,
+  target: trajectoryTarget,
+  onRunFailure: (event) => recordFailure("trajectory.review", event),
 });
 const weeklyScheduler = new WeeklyReviewSchedulerService({
   users: new PostgresAutoReviewUserStore(database.db),
@@ -56,7 +60,7 @@ const weeklyScheduler = new WeeklyReviewSchedulerService({
   reviews: trajectoryReviews,
   clock: systemClock,
 });
-await registerTrajectoryWorkers(boss, trajectoryReviews, weeklyScheduler);
+await registerTrajectoryWorkers(boss, trajectoryReviews, trajectoryRunner, weeklyScheduler);
 const privacy = new AccountPrivacyService({
   store: new PostgresAccountPrivacyStore(database.db, transactions),
   clock: systemClock,
@@ -69,6 +73,7 @@ async function close(): Promise<void> {
   if (closing) return;
   closing = true;
   await boss.stop({ graceful: true, timeout: 30_000 });
+  await providers.close();
   await database.close();
   logger.info("worker stopped");
 }

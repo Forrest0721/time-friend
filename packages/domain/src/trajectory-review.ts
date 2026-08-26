@@ -5,6 +5,38 @@ export const TRAJECTORY_WORKFLOW_VERSION = "1";
 export const TRAJECTORY_PROMPT_VERSION = "1";
 export const WEEKLY_REVIEW_OUTPUT_SCHEMA_VERSION = "1";
 
+export type TrajectoryProvider = "openai" | "deepseek";
+export type AgentTransport = "responses";
+
+export interface AgentRunTarget {
+  provider: TrajectoryProvider;
+  model: string;
+  transport: AgentTransport;
+  configVersion: 1;
+  configHash: string;
+}
+
+export type AgentExecutionErrorCode =
+  | "AGENT_PROVIDER_AUTH_FAILED"
+  | "AGENT_MODEL_NOT_FOUND"
+  | "AGENT_PROVIDER_INCOMPATIBLE_REQUEST"
+  | "AGENT_PROVIDER_NOT_CONFIGURED"
+  | "AGENT_TIMEOUT"
+  | "AGENT_INVALID_OUTPUT"
+  | "AGENT_TARGET_MISMATCH"
+  | "AGENT_PROVIDER_TEMPORARY";
+
+export class AgentExecutionError extends Error {
+  constructor(
+    public readonly code: AgentExecutionErrorCode,
+    public readonly retryable: boolean,
+    options?: ErrorOptions,
+  ) {
+    super(code, options);
+    this.name = "AgentExecutionError";
+  }
+}
+
 export type ReviewClaimType = "direction" | "progress" | "deviation" | "blocker" | "pattern";
 export type ReviewConfidence = "low" | "medium" | "high";
 export type EvidenceEntityType = "task" | "focus_session" | "progress_entry" | "task_event" | "memory";
@@ -95,7 +127,7 @@ export interface GenerateWeeklyReviewInput {
 
 export interface GeneratedReviewResult {
   review: GeneratedReview;
-  provider: string;
+  provider: TrajectoryProvider;
   model: string;
   sdkTraceId: string | null;
   usage: { inputTokens: number | null; outputTokens: number | null };
@@ -114,7 +146,7 @@ export interface AgentToolCallAudit {
 }
 
 export interface AgentRunner {
-  generateWeeklyReview(input: GenerateWeeklyReviewInput): Promise<GeneratedReviewResult>;
+  generateWeeklyReview(input: GenerateWeeklyReviewInput, target: AgentRunTarget): Promise<GeneratedReviewResult>;
 }
 
 export interface ValidatedGeneratedReview {

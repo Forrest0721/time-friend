@@ -3,7 +3,7 @@ import { fromDrizzle, PgBoss } from "pg-boss";
 import { z } from "zod";
 
 import type { AccountDeletionJobScheduler, ExecutionJobScheduler, TimeFriendTransaction, TrajectoryReviewJobScheduler } from "@time-friend/db";
-import type { AccountPrivacyService, ExecutionService, FocusDeadlineJob, TrajectoryReviewService, WeeklyReviewSchedulerService } from "@time-friend/domain";
+import type { AccountPrivacyService, AgentRunner, ExecutionService, FocusDeadlineJob, TrajectoryReviewService, WeeklyReviewSchedulerService } from "@time-friend/domain";
 import { captureException, recordDuration, recordFailure, withSpan } from "@time-friend/observability";
 
 export const POMODORO_EXPIRE_QUEUE = "pomodoro.expire";
@@ -48,7 +48,7 @@ export async function startTimeFriendBoss(boss: PgBoss): Promise<void> {
     deleteAfterSeconds: 7 * 24 * 60 * 60,
   });
   await boss.createQueue(TRAJECTORY_GENERATE_REVIEW_QUEUE, {
-    retryLimit: 5,
+    retryLimit: 3,
     retryDelay: 30,
     retryBackoff: true,
     expireInSeconds: 15 * 60,
@@ -134,12 +134,13 @@ export async function registerExecutionWorkers(boss: PgBoss, execution: Executio
 export async function registerTrajectoryWorkers(
   boss: PgBoss,
   trajectoryReviews: TrajectoryReviewService,
+  trajectoryRunner: AgentRunner,
   weeklyScheduler?: WeeklyReviewSchedulerService,
 ): Promise<void> {
   await boss.work(TRAJECTORY_GENERATE_REVIEW_QUEUE, { batchSize: 2 }, async (jobs) => {
     for (const job of jobs) {
       const { runId } = trajectoryReviewDataSchema.parse(job.data);
-      await observeJob(TRAJECTORY_GENERATE_REVIEW_QUEUE, () => trajectoryReviews.executeGeneration(runId));
+      await observeJob(TRAJECTORY_GENERATE_REVIEW_QUEUE, () => trajectoryReviews.executeGeneration(runId, trajectoryRunner));
     }
   });
   if (weeklyScheduler) {

@@ -32,6 +32,7 @@ export const agentRuns = pgTable(
     provider: text("provider").notNull(),
     model: text("model").notNull(),
     modelConfigJson: jsonb("model_config_json").$type<Record<string, unknown>>().notNull().default({}),
+    modelConfigHash: text("model_config_hash").notNull().default("legacy-v1"),
     promptVersion: text("prompt_version").notNull(),
     outputSchemaVersion: text("output_schema_version").notNull(),
     inputHash: text("input_hash").notNull(),
@@ -61,7 +62,7 @@ export const agentRuns = pgTable(
     }).onDelete("cascade"),
     unique("agent_runs_user_id_id_unique").on(table.userId, table.id),
     uniqueIndex("agent_runs_success_input_unique")
-      .on(table.userId, table.workflowVersion, table.inputHash)
+      .on(table.userId, table.workflowVersion, table.inputHash, table.provider, table.model, table.modelConfigHash)
       .where(sql`${table.status} = 'succeeded'`),
     uniqueIndex("agent_runs_one_active_per_snapshot")
       .on(table.periodSnapshotId, table.workflowVersion)

@@ -80,6 +80,9 @@ export class PostgresTrajectoryReviewStore implements TrajectoryReviewStore, Tra
             eq(agentRuns.userId, input.userId),
             eq(agentRuns.workflowVersion, input.workflowVersion),
             eq(agentRuns.inputHash, input.inputHash),
+            eq(agentRuns.provider, input.provider),
+            eq(agentRuns.model, input.model),
+            eq(agentRuns.modelConfigHash, input.modelConfigHash),
           ),
         )
         .orderBy(desc(agentRuns.createdAt));
@@ -218,8 +221,6 @@ export class PostgresTrajectoryReviewStore implements TrajectoryReviewStore, Tra
         .set({
           status: "validating",
           rawOutputJson: result.review,
-          provider: result.provider,
-          model: result.model,
           sdkTraceId: result.sdkTraceId,
           inputTokens: result.usage.inputTokens,
           outputTokens: result.usage.outputTokens,
@@ -1030,6 +1031,8 @@ function agentRunToRow(run: AgentRunRecord): typeof agentRuns.$inferInsert {
     workflowVersion: run.workflowVersion,
     provider: run.provider,
     model: run.model,
+    modelConfigJson: run.modelConfig,
+    modelConfigHash: run.modelConfigHash,
     promptVersion: run.promptVersion,
     outputSchemaVersion: run.outputSchemaVersion,
     inputHash: run.inputHash,
@@ -1057,7 +1060,8 @@ function toAgentRun(row: AgentRunRow): AgentRunRecord {
     row.workflowName !== TRAJECTORY_WORKFLOW_NAME ||
     row.workflowVersion !== TRAJECTORY_WORKFLOW_VERSION ||
     row.promptVersion !== TRAJECTORY_PROMPT_VERSION ||
-    row.outputSchemaVersion !== WEEKLY_REVIEW_OUTPUT_SCHEMA_VERSION
+    row.outputSchemaVersion !== WEEKLY_REVIEW_OUTPUT_SCHEMA_VERSION ||
+    (row.provider !== "openai" && row.provider !== "deepseek")
   ) {
     throw new Error("unsupported trajectory workflow version");
   }
@@ -1069,6 +1073,8 @@ function toAgentRun(row: AgentRunRow): AgentRunRecord {
     workflowVersion: TRAJECTORY_WORKFLOW_VERSION,
     provider: row.provider,
     model: row.model,
+    modelConfig: row.modelConfigJson,
+    modelConfigHash: row.modelConfigHash,
     promptVersion: TRAJECTORY_PROMPT_VERSION,
     outputSchemaVersion: WEEKLY_REVIEW_OUTPUT_SCHEMA_VERSION,
     inputHash: row.inputHash,

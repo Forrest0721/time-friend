@@ -7,12 +7,15 @@ import {
   validateGeneratedReview,
   WEEKLY_REVIEW_OUTPUT_SCHEMA_VERSION,
   type AgentRunner,
+  type AgentRunTarget,
+  AgentExecutionError,
   type GeneratedReview,
   type GeneratedReviewResult,
   type ReviewConfidence,
   type ReviewEvidenceRef,
   type ReviewClaimType,
   type TrajectoryAgentTools,
+  type TrajectoryProvider,
 } from "./trajectory-review.js";
 
 export type AgentRunStatus = "waiting_for_data" | "queued" | "running" | "validating" | "succeeded" | "failed";
@@ -25,8 +28,10 @@ export interface AgentRunRecord {
   periodSnapshotId: string;
   workflowName: typeof TRAJECTORY_WORKFLOW_NAME;
   workflowVersion: typeof TRAJECTORY_WORKFLOW_VERSION;
-  provider: string;
+  provider: TrajectoryProvider;
   model: string;
+  modelConfig: Record<string, unknown>;
+  modelConfigHash: string;
   promptVersion: typeof TRAJECTORY_PROMPT_VERSION;
   outputSchemaVersion: typeof WEEKLY_REVIEW_OUTPUT_SCHEMA_VERSION;
   inputHash: string;
@@ -153,10 +158,10 @@ export class TrajectoryReviewService {
     private readonly dependencies: {
       snapshots: Pick<TrajectoryService, "generateSnapshot">;
       store: TrajectoryReviewStore;
-      runner: AgentRunner;
       clock: Clock;
       ids: IdGenerator;
-      model: string;
+      target: AgentRunTarget;
+      onRunFailure?: (event: { provider: TrajectoryProvider; model: string; errorCode: string }) => void;
     },
   ) {}
 
@@ -170,8 +175,13 @@ export class TrajectoryReviewService {
       periodSnapshotId: snapshot.id,
       workflowName: TRAJECTORY_WORKFLOW_NAME,
       workflowVersion: TRAJECTORY_WORKFLOW_VERSION,
-      provider: "openai",
-      model: this.dependencies.model,
+      provider: this.dependencies.target.provider,
+      model: this.dependencies.target.model,
+      modelConfig: {
+        transport: this.dependencies.target.transport,
+        configVersion: this.dependencies.target.configVersion,
+      },
+      modelConfigHash: this.dependencies.target.configHash,
       promptVersion: TRAJECTORY_PROMPT_VERSION,
       outputSchemaVersion: WEEKLY_REVIEW_OUTPUT_SCHEMA_VERSION,
       inputHash: snapshot.inputHash,
@@ -193,7 +203,7 @@ export class TrajectoryReviewService {
     return requested;
   }
 
-  async executeGeneration(runId: string): Promise<WeeklyReviewView | null> {
+  async executeGeneration(runId: string, runner: AgentRunner): Promise<WeeklyReviewView | null> {
     const now = this.dependencies.clock.now().toISOString();
     const claimed = await this.dependencies.store.claimRun(runId, now);
     if (!claimed) return null;
@@ -202,13 +212,17 @@ export class TrajectoryReviewService {
       if (!context) throw new Error("RUN_CONTEXT_NOT_FOUND");
       let output = context.run.rawOutput;
       if (!output) {
-        const generated = await this.dependencies.runner.generateWeeklyReview({
+        const target = targetFromRun(context.run);
+        const generated = await runner.generateWeeklyReview({
           userId: context.run.userId,
           period: context.period,
           snapshot: context.snapshot,
           forceLowData: context.run.forceLowData,
           tools: this.dependencies.store.createAgentTools(context.run.userId, context.period, context.snapshot),
-        });
+        }, target);
+        if (generated.provider !== target.provider || generated.model !== target.model) {
+          throw new AgentExecutionError("AGENT_TARGET_MISMATCH", false);
+        }
         const validating = await this.dependencies.store.saveAgentOutput(runId, generated, this.dependencies.clock.now().toISOString());
         output = validating.rawOutput;
       }
@@ -228,8 +242,11 @@ export class TrajectoryReviewService {
       );
       return await this.dependencies.store.persistValidatedReview(runId, materialized, this.dependencies.clock.now().toISOString());
     } catch (error) {
-      await this.dependencies.store.failRun(runId, errorCode(error), redactError(error), this.dependencies.clock.now().toISOString());
-      throw error;
+      const code = errorCode(error);
+      await this.dependencies.store.failRun(runId, code, redactError(error), this.dependencies.clock.now().toISOString());
+      this.dependencies.onRunFailure?.({ provider: claimed.provider, model: claimed.model, errorCode: code });
+      if (shouldRetry(error, claimed.attempts)) throw error;
+      return null;
     }
   }
 
@@ -336,10 +353,39 @@ export function materializeReview(
 }
 
 function errorCode(error: unknown): string {
+  if (error instanceof AgentExecutionError) return error.code;
   return error instanceof Error && /^[A-Z0-9_]+$/.test(error.message) ? error.message : "AGENT_GENERATION_FAILED";
 }
 
 function redactError(error: unknown): string {
   const value = error instanceof Error ? `${error.name}: ${error.message}` : "Unknown error";
-  return value.replace(/sk-[A-Za-z0-9_-]+/g, "[REDACTED]").slice(0, 1_000);
+  return value
+    .replace(/sk-[A-Za-z0-9_-]+/g, "[REDACTED]")
+    .replace(/Authorization\s*[:=]\s*[^\s,;]+/giu, "Authorization: [REDACTED]")
+    .slice(0, 1_000);
+}
+
+function shouldRetry(error: unknown, attempts: number): boolean {
+  if (error instanceof AgentExecutionError) {
+    if (!error.retryable) return false;
+    if (error.code === "AGENT_INVALID_OUTPUT") return attempts < 2;
+    return attempts < 3;
+  }
+  if (error instanceof Error && ["NO_VALID_CLAIMS", "TRAJECTORY_EVIDENCE_SCOPE_VIOLATION"].includes(error.message)) return false;
+  return attempts < 3;
+}
+
+function targetFromRun(run: AgentRunRecord): AgentRunTarget {
+  const transport = run.modelConfig.transport;
+  const configVersion = run.modelConfig.configVersion;
+  if ((run.provider !== "openai" && run.provider !== "deepseek") || transport !== "responses" || configVersion !== 1) {
+    throw new AgentExecutionError("AGENT_PROVIDER_INCOMPATIBLE_REQUEST", false);
+  }
+  return {
+    provider: run.provider,
+    model: run.model,
+    transport,
+    configVersion,
+    configHash: run.modelConfigHash,
+  };
 }

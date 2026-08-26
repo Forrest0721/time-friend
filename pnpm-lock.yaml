@@ -258,6 +258,9 @@ importers:
       '@time-friend/observability':
         specifier: workspace:*
         version: link:../observability
+      openai:
+        specifier: 7.5.0
+        version: 7.5.0(ws@8.21.3)(zod@4.4.3)
       zod:
         specifier: 4.4.3
         version: 4.4.3

@@ -81,7 +81,7 @@ export const agentRunSchema = z.strictObject({
   periodSnapshotId: uuidSchema,
   workflowName: z.literal("trajectory.weekly-review.v1"),
   workflowVersion: z.literal("1"),
-  provider: z.string().min(1),
+  provider: z.enum(["openai", "deepseek"]),
   model: z.string().min(1),
   promptVersion: z.literal("1"),
   outputSchemaVersion: z.literal("1"),

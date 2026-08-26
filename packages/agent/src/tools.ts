@@ -9,7 +9,12 @@ import { weeklyReviewOutputSchema } from "./schema.js";
 const entityTypeSchema = z.enum(["task", "focus_session", "progress_entry", "task_event", "memory"]);
 const relationSchema = z.enum(["direct", "support", "maintenance", "exploration", "unrelated"]);
 
-export function createTrajectoryTools(input: GenerateWeeklyReviewInput, audit: AgentToolCallAudit[] = [], now: () => number = Date.now): Tool[] {
+export function createTrajectoryTools(
+  input: GenerateWeeklyReviewInput,
+  audit: AgentToolCallAudit[] = [],
+  now: () => number = Date.now,
+  telemetry: Record<string, string> = {},
+): Tool[] {
   return [
     tool({
       name: "get_period_snapshot",
@@ -20,7 +25,7 @@ export function createTrajectoryTools(input: GenerateWeeklyReviewInput, audit: A
       timeoutBehavior: "raise_exception",
       errorFunction: null,
       async execute({ snapshotId }) {
-        return auditTool("get_period_snapshot", { snapshotId }, audit, now, async () => {
+        return auditTool("get_period_snapshot", { snapshotId }, audit, now, telemetry, async () => {
           assertCurrentSnapshot(snapshotId, input);
           return input.tools.getPeriodSnapshot();
         });
@@ -39,7 +44,7 @@ export function createTrajectoryTools(input: GenerateWeeklyReviewInput, audit: A
       timeoutBehavior: "raise_exception",
       errorFunction: null,
       async execute(parameters) {
-        return auditTool("search_evidence", parameters, audit, now, () => input.tools.searchEvidence(parameters));
+        return auditTool("search_evidence", parameters, audit, now, telemetry, () => input.tools.searchEvidence(parameters));
       },
     }),
     tool({
@@ -51,7 +56,7 @@ export function createTrajectoryTools(input: GenerateWeeklyReviewInput, audit: A
       timeoutBehavior: "raise_exception",
       errorFunction: null,
       async execute() {
-        return auditTool("get_confirmed_memories", {}, audit, now, () => input.tools.getConfirmedMemories());
+        return auditTool("get_confirmed_memories", {}, audit, now, telemetry, () => input.tools.getConfirmedMemories());
       },
     }),
     tool({
@@ -63,7 +68,7 @@ export function createTrajectoryTools(input: GenerateWeeklyReviewInput, audit: A
       timeoutBehavior: "raise_exception",
       errorFunction: null,
       async execute() {
-        return auditTool("compare_periods", {}, audit, now, () => input.tools.comparePeriods());
+        return auditTool("compare_periods", {}, audit, now, telemetry, () => input.tools.comparePeriods());
       },
     }),
     tool({
@@ -79,7 +84,9 @@ export function createTrajectoryTools(input: GenerateWeeklyReviewInput, audit: A
       timeoutBehavior: "raise_exception",
       errorFunction: null,
       async execute(parameters) {
-        return auditTool("propose_contribution_edges", parameters, audit, now, () => input.tools.proposeContributionEdges(parameters));
+        return auditTool("propose_contribution_edges", parameters, audit, now, telemetry, () =>
+          input.tools.proposeContributionEdges(parameters),
+        );
       },
     }),
     tool({
@@ -91,7 +98,9 @@ export function createTrajectoryTools(input: GenerateWeeklyReviewInput, audit: A
       timeoutBehavior: "raise_exception",
       errorFunction: null,
       async execute({ review }) {
-        return auditTool("validate_review_evidence", { review }, audit, now, () => input.tools.validateReviewEvidence(review as GeneratedReview));
+        return auditTool("validate_review_evidence", { review }, audit, now, telemetry, () =>
+          input.tools.validateReviewEvidence(review as GeneratedReview),
+        );
       },
     }),
   ];
@@ -102,6 +111,7 @@ async function auditTool<T>(
   parameters: unknown,
   audit: AgentToolCallAudit[],
   now: () => number,
+  telemetry: Record<string, string>,
   work: () => Promise<T>,
 ): Promise<T> {
   const startedAt = now();
@@ -116,8 +126,8 @@ async function auditTool<T>(
       outputHash: hashCanonical(output),
       errorCode: null,
     });
-    recordDuration("agent.tool", durationMs, { tool: name, status: "succeeded" });
-    recordProductEvent("agent_tool_call", { tool: name, status: "succeeded" });
+    recordDuration("agent.tool", durationMs, { ...telemetry, tool: name, status: "succeeded" });
+    recordProductEvent("agent_tool_call", { ...telemetry, tool: name, status: "succeeded" });
     return output;
   } catch (error) {
     const durationMs = Math.max(0, now() - startedAt);
@@ -129,8 +139,8 @@ async function auditTool<T>(
       outputHash: null,
       errorCode: toolErrorCode(error),
     });
-    recordDuration("agent.tool", durationMs, { tool: name, status: "failed" });
-    recordFailure("agent.tool", { tool: name, errorCode: toolErrorCode(error) });
+    recordDuration("agent.tool", durationMs, { ...telemetry, tool: name, status: "failed" });
+    recordFailure("agent.tool", { ...telemetry, tool: name, errorCode: toolErrorCode(error) });
     throw error;
   }
 }

@@ -1,6 +1,9 @@
 import type { AgentRunRecord, WeeklyReviewView } from "@time-friend/domain";
 
-export type PublicAgentRun = Omit<AgentRunRecord, "rawOutput" | "errorDetailRedacted">;
+export type PublicAgentRun = Omit<
+  AgentRunRecord,
+  "rawOutput" | "errorDetailRedacted" | "modelConfig" | "modelConfigHash"
+>;
 
 export function toPublicAgentRun(run: AgentRunRecord): PublicAgentRun {
   return {

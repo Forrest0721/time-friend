@@ -1,6 +1,6 @@
 import { v7 as uuidv7 } from "uuid";
 
-import { OpenAITrajectoryAgentRunner } from "@time-friend/agent";
+import { loadTrajectoryRunTarget } from "@time-friend/agent";
 import {
   createDatabaseClient,
   PostgresAccountPrivacyStore,
@@ -61,10 +61,9 @@ const trajectoryReviewStore = new PostgresTrajectoryReviewStore(
 const trajectoryReviews = new TrajectoryReviewService({
   snapshots: trajectory,
   store: trajectoryReviewStore,
-  runner: new OpenAITrajectoryAgentRunner({ model: configuration.trajectoryModel }),
   clock: systemClock,
   ids: { next: uuidv7 },
-  model: configuration.trajectoryModel,
+  target: configuration.trajectoryTarget,
 });
 const trajectoryFeedback = new TrajectoryFeedbackService({
   store: trajectoryReviewStore,
@@ -129,7 +128,7 @@ function loadConfiguration() {
   const authSecret = requiredEnvironment("BETTER_AUTH_SECRET");
   if (authSecret.length < 32) throw new Error("BETTER_AUTH_SECRET must contain at least 32 characters");
   const authURL = requiredEnvironment("BETTER_AUTH_URL");
-  const trajectoryModel = requiredEnvironment("TRAJECTORY_MODEL");
+  const trajectoryTarget = loadTrajectoryRunTarget(process.env);
   const allowedOrigins = requiredEnvironment("WEB_ORIGINS")
     .split(",")
     .map((origin) => origin.trim())
@@ -141,7 +140,7 @@ function loadConfiguration() {
     databaseURL,
     authSecret,
     authURL,
-    trajectoryModel,
+    trajectoryTarget,
     allowedOrigins,
     port,
     host: process.env.HOST ?? "0.0.0.0",

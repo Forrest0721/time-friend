@@ -19,6 +19,7 @@ import {
 } from "@time-friend/db";
 import {
   AccountPrivacyService,
+  type AgentRunTarget,
   type AgentRunner,
   ExecutionService,
   FocusDeadlineJob,
@@ -45,6 +46,13 @@ import {
 import { accountDeletionRequests, users } from "@time-friend/db/schema";
 
 const USER_ID = "00000000-0000-7000-8000-000000000001";
+const TEST_AGENT_TARGET = {
+  provider: "openai",
+  model: "test-model",
+  transport: "responses",
+  configVersion: 1,
+  configHash: "b".repeat(64),
+} satisfies AgentRunTarget;
 
 describe("pg-boss execution jobs", () => {
   let container: StartedPostgreSqlContainer;
@@ -217,10 +225,9 @@ describe("pg-boss execution jobs", () => {
     const reviews = new TrajectoryReviewService({
       snapshots: trajectory,
       store: reviewStore,
-      runner,
+      target: TEST_AGENT_TARGET,
       clock: { now: () => new Date(now) },
       ids: { next: randomUUID },
-      model: "test-model",
     });
     const period = await trajectory.ensureCurrentWeek(USER_ID);
     const run = await reviews.requestGeneration(USER_ID, period.id);
@@ -230,7 +237,7 @@ describe("pg-boss execution jobs", () => {
     expect(jobs).toHaveLength(1);
     expect(jobs[0]?.data).toEqual({ runId: run.id });
 
-    await registerTrajectoryWorkers(boss, reviews);
+    await registerTrajectoryWorkers(boss, reviews, runner);
     const completed = await waitFor(async () => {
       const current = await reviews.getRun(USER_ID, run.id);
       return current?.status === "succeeded" ? current : null;

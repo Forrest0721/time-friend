@@ -151,6 +151,8 @@ function run(): AgentRunRecord {
     workflowVersion: "1",
     provider: "openai",
     model: "test",
+    modelConfig: { transport: "responses", configVersion: 1 },
+    modelConfigHash: "b".repeat(64),
     promptVersion: "1",
     outputSchemaVersion: "1",
     inputHash: "a".repeat(64),

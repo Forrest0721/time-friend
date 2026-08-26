@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { GeneratedReview, GeneratedReviewResult, TrajectoryAgentTools } from "./trajectory-review.js";
+import {
+  AgentExecutionError,
+  type AgentRunTarget,
+  type GeneratedReview,
+  type GeneratedReviewResult,
+  type TrajectoryAgentTools,
+} from "./trajectory-review.js";
 import { TrajectoryReviewService, type AgentRunRecord, type MaterializedReview, type TrajectoryReviewStore } from "./trajectory-generation.js";
 import type { PeriodRecord, PeriodSnapshot } from "./trajectory-service.js";
 
@@ -16,13 +22,13 @@ describe("TrajectoryReviewService", () => {
   it("persists model output before validation and reuses it on a validating retry", async () => {
     const fixture = setup(true);
     const run = await fixture.service.requestGeneration(USER_ID, PERIOD_ID, false);
-    const first = await fixture.service.executeGeneration(run.id);
+    const first = await fixture.service.executeGeneration(run.id, fixture.runner);
     expect(first?.review?.status).toBe("pending");
     expect(fixture.store.sequence).toEqual(["claim", "save-output", "persist-review"]);
 
     fixture.store.run = { ...fixture.store.run!, status: "validating", rawOutput: generatedResult.review };
     fixture.store.review = null;
-    await fixture.service.executeGeneration(run.id);
+    await fixture.service.executeGeneration(run.id, fixture.runner);
     expect(fixture.runner.generateWeeklyReview).toHaveBeenCalledTimes(1);
   });
 
@@ -33,8 +39,56 @@ describe("TrajectoryReviewService", () => {
       invalid: [{ ...generatedResult.review.claims[0]!.evidence[0]!, reason: "not_found" as const }],
     }));
     const run = await fixture.service.requestGeneration(USER_ID, PERIOD_ID, false);
-    await expect(fixture.service.executeGeneration(run.id)).rejects.toThrow("NO_VALID_CLAIMS");
+    await expect(fixture.service.executeGeneration(run.id, fixture.runner)).resolves.toBeNull();
     expect(fixture.store.run).toMatchObject({ status: "failed", errorCode: "NO_VALID_CLAIMS" });
+  });
+
+  it("fails permanently when the runner returns a different provider or model", async () => {
+    const fixture = setup(true);
+    fixture.runner.generateWeeklyReview.mockResolvedValue({
+      ...generatedResult,
+      provider: "deepseek",
+      model: "deepseek-v4-pro",
+    });
+    const run = await fixture.service.requestGeneration(USER_ID, PERIOD_ID, false);
+
+    await expect(fixture.service.executeGeneration(run.id, fixture.runner)).resolves.toBeNull();
+    expect(fixture.store.run).toMatchObject({ status: "failed", errorCode: "AGENT_TARGET_MISMATCH" });
+  });
+
+  it("allows three queue attempts for transient Provider failures", async () => {
+    const fixture = setup(true);
+    fixture.runner.generateWeeklyReview.mockRejectedValue(
+      new AgentExecutionError("AGENT_PROVIDER_TEMPORARY", true),
+    );
+    const run = await fixture.service.requestGeneration(USER_ID, PERIOD_ID, false);
+
+    await expect(fixture.service.executeGeneration(run.id, fixture.runner)).rejects.toMatchObject({
+      code: "AGENT_PROVIDER_TEMPORARY",
+    });
+    await expect(fixture.service.executeGeneration(run.id, fixture.runner)).rejects.toMatchObject({
+      code: "AGENT_PROVIDER_TEMPORARY",
+    });
+    await expect(fixture.service.executeGeneration(run.id, fixture.runner)).resolves.toBeNull();
+    expect(fixture.runner.generateWeeklyReview).toHaveBeenCalledTimes(3);
+    expect(fixture.store.run).toMatchObject({
+      status: "failed",
+      attempts: 3,
+      errorCode: "AGENT_PROVIDER_TEMPORARY",
+    });
+  });
+
+  it("allows only one retry for invalid Agent output", async () => {
+    const fixture = setup(true);
+    fixture.runner.generateWeeklyReview.mockRejectedValue(new AgentExecutionError("AGENT_INVALID_OUTPUT", true));
+    const run = await fixture.service.requestGeneration(USER_ID, PERIOD_ID, false);
+
+    await expect(fixture.service.executeGeneration(run.id, fixture.runner)).rejects.toMatchObject({
+      code: "AGENT_INVALID_OUTPUT",
+    });
+    await expect(fixture.service.executeGeneration(run.id, fixture.runner)).resolves.toBeNull();
+    expect(fixture.runner.generateWeeklyReview).toHaveBeenCalledTimes(2);
+    expect(fixture.store.run).toMatchObject({ status: "failed", attempts: 2, errorCode: "AGENT_INVALID_OUTPUT" });
   });
 });
 
@@ -42,6 +96,13 @@ const USER_ID = "00000000-0000-7000-8000-000000000001";
 const PERIOD_ID = "00000000-0000-7000-8000-000000000002";
 const SNAPSHOT_ID = "00000000-0000-7000-8000-000000000003";
 const EVIDENCE_ID = "00000000-0000-7000-8000-000000000004";
+const target: AgentRunTarget = {
+  provider: "openai",
+  model: "test-model",
+  transport: "responses",
+  configVersion: 1,
+  configHash: "b".repeat(64),
+};
 
 const period: PeriodRecord = {
   id: PERIOD_ID,
@@ -108,10 +169,9 @@ function setup(enough: boolean) {
   const service = new TrajectoryReviewService({
     snapshots: { generateSnapshot: vi.fn(async () => snapshot(enough)) },
     store,
-    runner,
     clock: { now: () => new Date("2026-08-22T08:00:00.000Z") },
     ids: { next: () => `00000000-0000-7000-8000-${String(++id).padStart(12, "0")}` },
-    model: "test-model",
+    target,
   });
   return { service, store, runner };
 }

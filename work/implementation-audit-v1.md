@@ -57,6 +57,7 @@
 | Agent 开关、清单排除、导出和异步删号 | PASS | 用户偏好、学习策略、完整 JSON 导出和级联擦除 worker；领域/DB/API 测试覆盖 |
 | 低数据等待、强制生成、失败降级 | PASS | 阈值、limitations、重试和任务/专注隔离；领域/DB/Agent/Playwright 覆盖 |
 | 模型、prompt、工具、hash、输出、耗时与成本审计 | PASS | agent_runs 持久化 tool-call hashes 与 micro-USD；Agent/DB/Worker 测试覆盖 |
+| OpenAI / DeepSeek 多 Provider 运行边界 | PASS | 显式 Provider Registry、持久化目标与配置哈希、无跨 Provider 回退、DeepSeek trace 隔离；ADR-009 与 Agent/DB/Worker 测试覆盖 |
 
 ## 4. 首次使用与跨周闭环
 
