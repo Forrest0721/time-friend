@@ -1610,6 +1610,910 @@ select {
   }
 }
 
+/* V1 task surface: compact, list-first, and deliberately familiar. */
+.dida-shell {
+  --dida-blue: #4772fa;
+  --dida-blue-soft: #edf2ff;
+  --dida-text: #191919;
+  --dida-muted: #8b8b8b;
+  --dida-line: #ececec;
+  --dida-hover: #f5f5f5;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 50px 240px minmax(0, 1fr);
+  background: #fff;
+  color: var(--dida-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+.dida-shell.dida-view-focus,
+.dida-shell.dida-view-trajectory {
+  grid-template-columns: 50px minmax(0, 1fr);
+}
+.dida-app-rail {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  padding: 10px 0 12px;
+  border-right: 1px solid #e4e4e4;
+  background: #f3f3f3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 30;
+}
+.dida-avatar {
+  width: 30px;
+  height: 30px;
+  margin-bottom: 16px;
+  border: 0;
+  border-radius: 7px;
+  background: linear-gradient(145deg, #8aa4d6, #6378a8);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+.dida-app-rail nav,
+.dida-rail-bottom {
+  width: 100%;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+.dida-rail-bottom {
+  margin-top: auto;
+}
+.dida-app-rail nav button,
+.dida-rail-bottom button {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #8b8b8b;
+  display: grid;
+  place-items: center;
+}
+.dida-app-rail nav button:hover,
+.dida-rail-bottom button:hover {
+  background: #e9e9e9;
+  color: #555;
+}
+.dida-app-rail nav button.active {
+  color: #fff;
+  background: var(--dida-blue);
+  box-shadow: 0 4px 12px rgba(71, 114, 250, 0.25);
+}
+.dida-app-rail svg,
+.dida-rail-bottom svg {
+  width: 19px;
+  height: 19px;
+  stroke-width: 1.9;
+}
+.dida-list-sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  min-width: 0;
+  padding: 14px 12px 12px;
+  border-right: 1px solid var(--dida-line);
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+.dida-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 2px 2px 16px;
+  border-bottom: 1px solid var(--dida-line);
+}
+.dida-shortcuts button {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  color: #666;
+  font-size: 10px;
+}
+.dida-shortcuts button > span {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+}
+.dida-shortcuts svg {
+  width: 15px;
+  height: 15px;
+}
+.dida-shortcuts .coral { background: #fff0ee; color: #e36d61; }
+.dida-shortcuts .gold { background: #fff8df; color: #d6a619; }
+.dida-shortcuts .violet { background: #f2efff; color: #8374d5; }
+.dida-shortcuts .mint { background: #eaf8f3; color: #48a47f; }
+.dida-smart-lists {
+  display: grid;
+  gap: 2px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--dida-line);
+}
+.dida-smart-lists button,
+.dida-folder,
+.dida-list-entry,
+.dida-new-list {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #3e3e3e;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  text-align: left;
+  font-size: 13px;
+}
+.dida-smart-lists button:hover,
+.dida-folder:hover,
+.dida-list-entry:hover,
+.dida-new-list:hover {
+  background: #f0f0f0;
+}
+.dida-smart-lists button.active {
+  background: #ededed;
+  color: #222;
+  font-weight: 600;
+}
+.dida-smart-lists svg,
+.dida-folder svg,
+.dida-new-list svg {
+  width: 16px;
+  height: 16px;
+  color: #666;
+  stroke-width: 1.8;
+}
+.dida-smart-lists small,
+.dida-folder small,
+.dida-list-entry small {
+  color: #aaa;
+  font-size: 11px;
+}
+.dida-sidebar-section {
+  margin-top: 14px;
+}
+.dida-sidebar-section > div {
+  height: 28px;
+  padding: 0 8px;
+  color: #aaa;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+}
+.dida-sidebar-section > div button {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  background: transparent;
+  color: #aaa;
+}
+.dida-sidebar-section > div svg {
+  width: 14px;
+}
+.dida-folder {
+  grid-template-columns: 12px 17px minmax(0, 1fr) auto;
+  gap: 5px;
+  font-weight: 500;
+}
+.dida-list-entry {
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  padding-left: 28px;
+}
+.dida-list-entry .list-dot {
+  width: 8px;
+  height: 8px;
+}
+.dida-new-list {
+  margin-top: auto;
+  color: #8d8d8d;
+  grid-template-columns: 17px 1fr;
+}
+.dida-workspace {
+  min-width: 0;
+  min-height: 100vh;
+  background: #fff;
+}
+.dida-task-layout {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.dida-task-layout.with-detail {
+  grid-template-columns: minmax(520px, 1fr) minmax(360px, 36vw);
+}
+.dida-task-pane {
+  min-width: 0;
+  height: 100vh;
+  overflow: auto;
+  background: #fff;
+}
+.dida-task-header {
+  height: 62px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.dida-task-header > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dida-task-header h1 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 650;
+}
+.dida-task-header span {
+  color: #aaa;
+  font-size: 12px;
+}
+.dida-task-header button {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #555;
+  display: grid;
+  place-items: center;
+}
+.dida-task-header button:hover {
+  background: var(--dida-hover);
+}
+.dida-task-header svg {
+  width: 16px;
+  height: 16px;
+}
+.dida-task-composer {
+  height: 42px;
+  margin: 0 18px 16px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: #f7f7f7;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #b0b0b0;
+}
+.dida-task-composer > svg {
+  width: 17px;
+  height: 17px;
+}
+.dida-task-composer input {
+  min-width: 0;
+  flex: 1;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--dida-text);
+  font-size: 14px;
+}
+.dida-task-composer input::placeholder {
+  color: #b8b8b8;
+}
+.dida-task-composer button {
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--dida-blue);
+  color: #fff;
+  font-size: 11px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.dida-task-composer:focus-within button {
+  opacity: 1;
+}
+.dida-task-list {
+  padding: 0 18px 60px;
+}
+.dida-group-heading {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--dida-line);
+  color: #555;
+  font-size: 13px;
+  font-weight: 600;
+}
+.dida-group-heading small {
+  color: #aaa;
+  font-size: 11px;
+  font-weight: 400;
+}
+.dida-task-row {
+  position: relative;
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto 28px;
+  gap: 8px;
+  align-items: center;
+  border-bottom: 1px solid var(--dida-line);
+  padding: 0 6px;
+  transition: background 100ms ease;
+}
+.dida-task-row:hover,
+.dida-task-row.selected {
+  background: #f5f5f5;
+}
+.dida-task-row.selected::before {
+  content: "";
+  position: absolute;
+  left: -18px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--dida-blue);
+}
+.dida-check {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1.5px solid #aaa;
+  border-radius: 4px;
+  background: #fff;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+}
+.dida-check:hover {
+  border-color: var(--dida-blue);
+  background: var(--dida-blue-soft);
+}
+.dida-task-copy {
+  min-width: 0;
+  height: 43px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+.dida-task-copy b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 400;
+}
+.dida-task-copy small {
+  flex: none;
+  color: #aaa;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+}
+.dida-task-copy .list-dot {
+  width: 6px;
+  height: 6px;
+}
+.dida-row-meta {
+  color: #999;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.dida-row-focus {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--dida-blue);
+  display: grid;
+  place-items: center;
+  opacity: 0;
+}
+.dida-row-focus svg {
+  width: 13px;
+  height: 13px;
+  fill: currentColor;
+}
+.dida-task-row:hover .dida-row-focus,
+.dida-task-row:focus-within .dida-row-focus {
+  opacity: 1;
+}
+.dida-completed {
+  margin-top: 14px;
+}
+.dida-completed summary {
+  height: 36px;
+  color: #666;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+.dida-completed summary::before {
+  content: "⌄";
+  color: #aaa;
+}
+.dida-completed summary span {
+  color: #aaa;
+  font-size: 11px;
+  font-weight: 400;
+}
+.dida-task-row.done {
+  opacity: 0.45;
+}
+.dida-task-row.done .dida-check {
+  border-color: #bbb;
+  background: #bbb;
+}
+.dida-task-row.done b {
+  text-decoration: line-through;
+}
+.dida-task-detail {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  min-width: 0;
+  border-left: 1px solid var(--dida-line);
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+.dida-detail-toolbar {
+  flex: none;
+  height: 56px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--dida-line);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dida-detail-toolbar > button:not(.dida-check) {
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #888;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.dida-detail-toolbar > button:not(.dida-check):hover {
+  background: var(--dida-hover);
+}
+.dida-detail-toolbar svg {
+  width: 15px;
+  height: 15px;
+}
+.dida-detail-toolbar .dida-detail-close {
+  margin-left: auto;
+  font-size: 20px;
+}
+.dida-detail-title {
+  margin: 18px 20px 8px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--dida-text);
+  font-size: 19px;
+  font-weight: 650;
+}
+.dida-detail-note {
+  min-height: 220px;
+  margin: 0 20px;
+  padding: 12px 0;
+  border: 0;
+  border-top: 1px solid transparent;
+  outline: 0;
+  resize: vertical;
+  color: #555;
+  line-height: 1.8;
+  font-size: 13px;
+}
+.dida-detail-note::placeholder {
+  color: #bbb;
+}
+.dida-detail-progress {
+  margin: 22px 20px;
+  padding: 14px;
+  border: 1px solid var(--dida-line);
+  border-radius: 8px;
+  background: #fafafa;
+}
+.dida-detail-progress > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.dida-detail-progress span {
+  color: #777;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.dida-detail-progress svg {
+  width: 15px;
+}
+.dida-detail-progress b {
+  font-size: 13px;
+}
+.dida-detail-progress p {
+  margin: 10px 0 12px;
+  color: #999;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.dida-detail-progress button {
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--dida-blue);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.dida-detail-progress button svg {
+  width: 13px;
+  fill: currentColor;
+}
+.dida-task-detail footer {
+  height: 48px;
+  margin-top: auto;
+  padding: 0 20px;
+  border-top: 1px solid var(--dida-line);
+  color: #666;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.dida-task-detail footer button {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: #888;
+}
+.dida-task-detail footer svg {
+  width: 16px;
+}
+
+@media (max-width: 1100px) {
+  .dida-task-layout.with-detail {
+    grid-template-columns: minmax(430px, 1fr) 360px;
+  }
+  .dida-task-copy small {
+    display: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .dida-shell {
+    grid-template-columns: 50px minmax(0, 1fr);
+  }
+  .dida-list-sidebar {
+    display: none;
+  }
+  .dida-task-detail {
+    position: fixed;
+    z-index: 45;
+    right: 0;
+    width: min(430px, calc(100vw - 50px));
+    box-shadow: -16px 0 42px rgba(0, 0, 0, 0.1);
+  }
+  .dida-task-layout.with-detail {
+    display: block;
+  }
+}
+
+@media (max-width: 600px) {
+  .dida-shell,
+  .dida-shell.dida-view-focus,
+  .dida-shell.dida-view-trajectory {
+    display: block;
+  }
+  .dida-app-rail {
+    display: none;
+  }
+  .dida-task-header {
+    padding-inline: 12px;
+  }
+  .dida-task-composer,
+  .dida-task-list {
+    margin-inline: 10px;
+  }
+  .dida-task-list {
+    padding-inline: 0;
+    padding-bottom: 86px;
+  }
+  .dida-row-meta {
+    display: none;
+  }
+  .dida-task-detail {
+    width: 100vw;
+  }
+}
+
+/* Demo surfaces follow the same list-first V1 language. */
+.dida-view-lists .standard-page {
+  max-width: none;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0 18px 70px;
+  background: #fff;
+}
+.dida-view-lists .page-header {
+  min-height: 68px;
+  align-items: center;
+}
+.dida-view-lists .page-header .eyebrow,
+.dida-view-lists .page-header p {
+  display: none;
+}
+.dida-view-lists .page-header h1 {
+  margin: 0;
+  font: 650 20px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+  letter-spacing: 0;
+}
+.dida-view-lists .primary-action {
+  min-height: 30px;
+  border-radius: 6px;
+  padding: 0 10px;
+  background: #4772fa;
+  box-shadow: none;
+  font-size: 11px;
+}
+.dida-view-lists .filter-row {
+  margin: 0 0 8px;
+  padding: 0 0 10px;
+  border-bottom-color: #ececec;
+}
+.dida-view-lists .filter-row button {
+  padding: 6px 9px;
+  border-radius: 5px;
+  font-size: 11px;
+}
+.dida-view-lists .filter-row button.selected {
+  background: #edf2ff;
+  color: #4772fa;
+}
+.dida-view-lists .list-board {
+  margin: 0;
+  display: block;
+}
+.dida-view-lists .list-group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.dida-view-lists .list-group-title {
+  min-height: 36px;
+  margin: 8px 0 0;
+  border-bottom: 1px solid #ececec;
+}
+.dida-view-lists .list-group-title h2 {
+  font: 600 13px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.dida-view-lists .list-group article {
+  min-height: 44px;
+  grid-template-columns: 20px 1fr 28px;
+  gap: 8px;
+  padding: 0 6px;
+  border-top: 0;
+  border-bottom: 1px solid #ececec;
+}
+.dida-view-lists .list-group article:hover {
+  background: #f5f5f5;
+}
+.dida-view-lists .list-group article h3 {
+  font-size: 14px;
+  font-weight: 400;
+}
+.dida-view-lists .list-group article p {
+  display: none;
+}
+.dida-view-lists .plain-check {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+}
+.dida-view-lists .row-play {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  color: #4772fa;
+  opacity: 0;
+}
+.dida-view-lists .list-group article:hover .row-play {
+  opacity: 1;
+}
+.demo-focus-layout {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(520px, 62%) minmax(360px, 38%);
+  background: #171717;
+  color: #f2f2f2;
+}
+.demo-focus-layout .focus-page {
+  min-height: 100vh;
+  padding: 0 clamp(22px, 4vw, 56px);
+  border-right: 1px solid #2a2a2a;
+  background: #171717;
+}
+.demo-focus-layout .focus-top,
+.demo-focus-layout .focus-footer {
+  border-color: #2a2a2a;
+  color: #888;
+}
+.demo-focus-layout .mode-switch {
+  background: #222;
+}
+.demo-focus-layout .mode-switch button {
+  color: #888;
+}
+.demo-focus-layout .mode-switch button.active {
+  background: #343434;
+  color: #fff;
+}
+.demo-focus-layout .focus-orbit {
+  background: conic-gradient(#4772fa var(--progress), #343434 0);
+  box-shadow: none;
+}
+.demo-focus-layout .focus-orbit > div {
+  border-color: #1d1d1d;
+  background: #171717;
+}
+.demo-focus-layout .focus-orbit b,
+.demo-focus-layout .focus-task-name h1 {
+  color: #f5f5f5;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.demo-focus-layout .focus-orbit span,
+.demo-focus-layout .focus-orbit em,
+.demo-focus-layout .focus-stage > p,
+.demo-focus-layout .focus-stage select {
+  color: #888;
+}
+.demo-focus-layout .main-control {
+  background: #4772fa;
+  box-shadow: none;
+}
+.demo-focus-layout .minor-control {
+  border-color: #444;
+  color: #aaa;
+}
+.demo-focus-overview {
+  min-width: 0;
+  height: 100vh;
+  padding: 24px 20px 30px;
+  overflow: auto;
+}
+.demo-focus-overview h2 {
+  margin: 0 0 18px;
+  font-size: 16px;
+}
+.demo-focus-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.demo-focus-facts article {
+  min-height: 84px;
+  padding: 14px;
+  border-radius: 7px;
+  background: #202020;
+}
+.demo-focus-facts span {
+  color: #777;
+  font-size: 10px;
+}
+.demo-focus-facts b {
+  display: block;
+  margin-top: 12px;
+  color: #e7e7e7;
+  font-size: 23px;
+}
+.demo-focus-records {
+  margin-top: 42px;
+}
+.demo-focus-records > div {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #2a2a2a;
+}
+.demo-focus-records h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.demo-focus-records button {
+  border: 0;
+  background: transparent;
+  color: #aaa;
+  font-size: 18px;
+}
+.demo-focus-records article {
+  min-height: 64px;
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  border-bottom: 1px solid #282828;
+}
+.demo-focus-records article > i {
+  width: 8px;
+  height: 8px;
+  border: 2px solid #4772fa;
+  border-radius: 50%;
+}
+.demo-focus-records article div {
+  display: grid;
+  gap: 5px;
+}
+.demo-focus-records article span,
+.demo-focus-records article em {
+  color: #777;
+  font-size: 10px;
+  font-style: normal;
+}
+.demo-focus-records article b {
+  color: #ddd;
+  font-size: 12px;
+}
+.dida-view-trajectory .standard-page {
+  background: #f7f7f7;
+}
+
+@media (max-width: 860px) {
+  .demo-focus-layout {
+    display: block;
+  }
+  .demo-focus-layout .focus-page {
+    min-height: 700px;
+    border-right: 0;
+  }
+  .demo-focus-overview {
+    height: auto;
+    border-top: 1px solid #2a2a2a;
+  }
+}
+
 /* Connected product surface: the real API-backed application. */
 .connected-shell {
   min-height: 100vh;
@@ -3125,6 +4029,729 @@ select {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* API-backed V1 shell: same interaction grammar as the prototype above. */
+.connected-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 50px 240px minmax(0, 1fr);
+  background: #fff;
+  color: #191919;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+.connected-shell.connected-view-focus,
+.connected-shell.connected-view-trajectory {
+  grid-template-columns: 50px minmax(0, 1fr);
+}
+.connected-sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  padding: 14px 12px 12px;
+  border-right: 1px solid #ececec;
+  background: #fafafa;
+  backdrop-filter: none;
+  display: flex;
+  flex-direction: column;
+  z-index: 20;
+}
+.connected-shortcuts {
+  flex: none;
+}
+.connected-smart-lists {
+  display: grid !important;
+  gap: 2px !important;
+  margin: 0 !important;
+  padding: 12px 0 !important;
+  border-bottom: 1px solid #ececec;
+}
+.connected-smart-lists button {
+  width: 100%;
+  height: 36px !important;
+  padding: 0 10px !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  color: #3e3e3e !important;
+  display: grid !important;
+  grid-template-columns: 18px minmax(0, 1fr) auto !important;
+  gap: 8px !important;
+  align-items: center !important;
+  text-align: left !important;
+  font-size: 13px !important;
+}
+.connected-smart-lists button:hover,
+.connected-smart-lists button.active {
+  background: #ededed !important;
+}
+.connected-smart-lists button.active {
+  font-weight: 600;
+}
+.connected-smart-lists svg {
+  width: 16px;
+  height: 16px;
+  color: #666;
+  stroke-width: 1.8;
+}
+.connected-smart-lists small {
+  color: #aaa;
+  font-size: 11px;
+}
+.connected-lists {
+  min-height: 0;
+  overflow: auto;
+  margin-top: 14px;
+}
+.connected-section-label {
+  height: 28px;
+  padding: 0 8px;
+  color: #aaa;
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.connected-section-label button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: 16px;
+}
+.connected-lists section h3 {
+  margin: 10px 10px 4px;
+  color: #777;
+  font-size: 11px;
+}
+.connected-list-button,
+.connected-add-list {
+  height: 34px;
+  border-radius: 6px;
+  padding: 0 10px;
+  color: #454545;
+  font-size: 12px;
+}
+.connected-list-button:hover,
+.connected-add-list:hover {
+  background: #f0f0f0;
+}
+.connected-list-button.active {
+  background: #ededed;
+  color: #222;
+}
+.connected-list-button i {
+  width: 8px;
+  height: 8px;
+}
+.connected-list-button small {
+  color: #aaa;
+  font-size: 10px;
+}
+.connected-account {
+  padding: 12px 6px 0;
+  border-top-color: #ececec;
+  grid-template-columns: 30px minmax(0, 1fr);
+}
+.connected-account > span {
+  width: 30px;
+  height: 30px;
+  background: #e8ecf7;
+  color: #566b9e;
+}
+.connected-account b {
+  font-size: 10px;
+}
+.connected-account small {
+  font-size: 8px;
+}
+.connected-account p {
+  grid-column: 1/-1;
+  display: flex;
+  justify-content: space-between;
+}
+.connected-account button {
+  font-size: 8px;
+}
+.connected-workspace {
+  min-width: 0;
+  min-height: 100vh;
+  background: #fff;
+}
+.connected-task-layout {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.connected-task-layout.with-detail {
+  grid-template-columns: minmax(520px, 1fr) minmax(380px, 36vw);
+}
+.connected-task-main {
+  min-width: 0;
+  height: 100vh;
+  overflow: auto;
+  padding: 0 18px 60px;
+  background: #fff;
+}
+.connected-task-layout.with-detail .connected-task-main {
+  padding-inline: 18px;
+}
+.connected-page-header {
+  min-height: 62px;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.connected-title-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.connected-title-bar > button {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #555;
+}
+.connected-title-bar > button:hover {
+  background: #f5f5f5;
+}
+.connected-page-header .connected-title-bar h1 {
+  margin: 0;
+  color: #191919;
+  font: 650 20px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+  letter-spacing: 0;
+}
+.connected-title-bar small {
+  color: #aaa;
+  font-size: 12px;
+}
+.connected-page-header > div:last-child {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.connected-secondary {
+  height: 30px;
+  border-color: transparent;
+  border-radius: 6px;
+  padding: 0 9px;
+  background: transparent;
+  color: #777;
+  font-size: 10px;
+}
+.connected-secondary:hover {
+  background: #f5f5f5;
+}
+.connected-list-context {
+  margin: -5px 12px 9px 38px;
+  color: #aaa;
+  font-size: 10px;
+}
+.connected-task-commitment-hint,
+.connected-onboarding-card {
+  margin: 8px 0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  box-shadow: none;
+}
+.connected-task-commitment-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.connected-task-commitment-hint p {
+  margin: 0;
+}
+.connected-task-commitment-hint small {
+  margin-left: auto;
+}
+.connected-onboarding-card h2 {
+  margin: 2px 0;
+  font: 600 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.connected-composer {
+  min-height: 42px;
+  margin: 0 0 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: #f7f7f7;
+  display: block;
+}
+.connected-composer-main {
+  height: 42px;
+  padding: 0 10px 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #b0b0b0;
+}
+.connected-composer-main > span {
+  font-size: 18px;
+}
+.connected-composer-main > input:first-of-type {
+  min-width: 0;
+  flex: 1 1 auto;
+  height: 100%;
+  color: #191919;
+  font-size: 14px;
+}
+.connected-composer-main > button {
+  height: 28px;
+  border-radius: 5px;
+  padding: 0 10px;
+  background: #4772fa;
+  color: #fff;
+  font-size: 11px;
+  opacity: 0;
+}
+.connected-composer:focus-within .connected-composer-main > button {
+  opacity: 1;
+}
+.connected-composer-options {
+  border-top: 1px solid #ececec;
+}
+.connected-composer-options summary {
+  width: fit-content;
+  padding: 7px 12px;
+  color: #999;
+  font-size: 10px;
+  cursor: pointer;
+}
+.connected-composer-options > div {
+  padding: 0 10px 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.connected-composer-options input,
+.connected-composer-options select {
+  flex: 1 1 110px;
+  height: 30px;
+  max-width: 165px;
+  padding: 0 7px;
+  border: 1px solid #e1e1e1;
+  border-radius: 5px;
+  background: #fff;
+  color: #666;
+  font-size: 10px;
+}
+.connected-group {
+  margin-top: 10px;
+}
+.connected-group-title {
+  min-height: 34px;
+  align-items: center;
+  border-bottom-color: #ececec;
+}
+.connected-group-title h2 {
+  color: #555;
+  font: 600 13px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.connected-group-title span {
+  color: #aaa;
+  font-size: 11px;
+}
+.connected-item {
+  min-height: 44px;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 0 6px;
+  border-bottom-color: #ececec;
+}
+.connected-item:hover {
+  background: #f5f5f5;
+}
+.connected-check {
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid #aaa;
+  border-radius: 4px;
+  background: #fff;
+}
+.connected-note-mark {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  font-size: 8px;
+}
+.connected-item-copy {
+  height: 43px;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+.connected-item-copy b {
+  min-width: 0;
+  color: #222;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 400;
+}
+.connected-item-copy small {
+  flex: none;
+  margin: 0;
+  color: #aaa;
+  font-size: 10px;
+}
+.connected-row-actions {
+  opacity: 0;
+}
+.connected-item:hover .connected-row-actions,
+.connected-item:focus-within .connected-row-actions {
+  opacity: 1;
+}
+.connected-row-actions button {
+  height: 26px;
+  border-radius: 5px;
+  font-size: 10px;
+}
+.connected-row-actions .connected-focus-mini {
+  min-width: 48px;
+  border-color: #dce4ff;
+  color: #4772fa;
+}
+.connected-subtasks {
+  grid-column: 2/-1;
+  padding-bottom: 8px;
+}
+.connected-subtasks button {
+  border-radius: 5px;
+  padding: 4px 7px;
+  background: #f5f5f5;
+  font-size: 9px;
+}
+.connected-completed summary {
+  min-height: 36px;
+  padding: 0;
+  color: #777;
+  font-size: 11px;
+}
+.connected-drag-handle {
+  top: 13px;
+  left: -14px;
+}
+.connected-detail {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: auto;
+  border-left: 1px solid #ececec;
+  background: #fff;
+  padding: 0 20px 48px;
+}
+.connected-detail-top {
+  height: 56px;
+  margin: 0 -20px;
+  padding: 0 16px;
+  border-bottom: 1px solid #ececec;
+  color: #888;
+  display: flex;
+  align-items: center;
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 11px;
+}
+.connected-detail-top button {
+  margin-left: auto;
+  font-size: 20px;
+}
+.connected-title-input {
+  margin: 18px 0 10px;
+  color: #191919;
+  font: 650 19px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+}
+.connected-field {
+  gap: 5px;
+  margin-top: 10px;
+  color: #999;
+  font-size: 9px;
+}
+.connected-field input,
+.connected-field textarea,
+.connected-field select,
+.connected-progress-box select {
+  border-color: #e5e5e5;
+  border-radius: 6px;
+  background: #fafafa;
+}
+.connected-block-editor {
+  border-color: #e8e8e8;
+  border-radius: 6px;
+  background: #fff;
+}
+.connected-editor-toolbar {
+  border-bottom-color: #ececec;
+  background: #fafafa;
+}
+.connected-detail > .connected-primary {
+  min-height: 34px;
+  border-radius: 6px;
+  background: #4772fa;
+  box-shadow: none;
+}
+.connected-detail-actions button,
+.connected-danger {
+  min-height: 30px;
+  border-color: #e1e1e1;
+  border-radius: 6px;
+  font-size: 9px;
+}
+.connected-execution-summary > article,
+.connected-progress-box,
+.connected-progress-history,
+.connected-timeline {
+  border-color: #ececec;
+}
+
+/* Focus deliberately becomes a separate, quiet working room. */
+.connected-focus-page {
+  width: 100%;
+  max-width: none;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(520px, 62%) minmax(360px, 38%);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  background: #171717;
+  color: #f2f2f2;
+}
+.connected-focus-page > .connected-page-header {
+  grid-column: 1;
+  grid-row: 1;
+  min-height: 70px;
+  padding: 0 24px;
+  border-bottom: 1px solid #2a2a2a;
+}
+.connected-focus-page > .connected-page-header h1 {
+  color: #f2f2f2;
+  font-size: 20px;
+}
+.connected-focus-page > .connected-page-header p,
+.connected-focus-page > .connected-page-header span {
+  color: #858585;
+}
+.connected-focus-stage {
+  grid-column: 1;
+  grid-row: 2/4;
+  min-height: calc(100vh - 70px);
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: #171717;
+  padding: 30px;
+}
+.connected-focus-setup select,
+.connected-focus-setup input,
+.connected-mode-switch {
+  border-color: #393939;
+  background: #222;
+  color: #ddd;
+}
+.connected-mode-switch button.active,
+.connected-segment button.active {
+  background: #343434;
+  color: #fff;
+}
+.connected-duration-presets button {
+  color: #999;
+}
+.connected-timer {
+  width: clamp(230px, 28vw, 330px);
+  margin: 24px 0;
+  border-color: #454545;
+  box-shadow: inset 0 0 0 10px rgba(255, 255, 255, 0.025);
+}
+.connected-timer.running {
+  border-color: #4772fa;
+  box-shadow: inset 0 0 0 10px rgba(255, 255, 255, 0.025), 0 0 0 4px rgba(71, 114, 250, 0.12);
+}
+.connected-timer b {
+  color: #f7f7f7;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.connected-timer span,
+.connected-timer small {
+  color: #8c8c8c;
+}
+.connected-focus-actions .connected-primary {
+  background: #4772fa;
+  box-shadow: none;
+}
+.connected-focus-actions > button:not(.connected-primary) {
+  border-color: #444;
+  color: #bbb;
+}
+.connected-today-summary {
+  grid-column: 2;
+  grid-row: 1/3;
+  margin: 0;
+  padding: 24px 20px 20px;
+  border-left: 1px solid #2a2a2a;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  align-content: start;
+}
+.connected-today-summary::before {
+  content: "概览";
+  grid-column: 1/-1;
+  margin-bottom: 8px;
+  color: #ddd;
+  font-size: 16px;
+  font-weight: 600;
+}
+.connected-today-summary article {
+  min-height: 84px;
+  padding: 14px;
+  border: 0;
+  border-radius: 7px;
+  background: #202020;
+}
+.connected-today-summary span,
+.connected-today-summary small {
+  color: #777;
+  font-size: 9px;
+}
+.connected-today-summary b {
+  margin: 10px 0 4px;
+  color: #e7e7e7;
+  font: 600 22px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.connected-focus-page > .connected-records {
+  grid-column: 2;
+  grid-row: 3;
+  min-height: 0;
+  margin: 0;
+  padding: 0 20px 30px;
+  border-left: 1px solid #2a2a2a;
+  overflow: auto;
+}
+.connected-focus-page .connected-records .connected-group-title {
+  position: sticky;
+  top: 0;
+  background: #171717;
+  border-bottom-color: #2a2a2a;
+}
+.connected-focus-page .connected-records .connected-group-title h2 {
+  color: #ddd;
+}
+.connected-focus-page .connected-records article {
+  min-height: 58px;
+  border-bottom-color: #2a2a2a;
+}
+.connected-focus-page .connected-records b {
+  color: #ddd;
+}
+.connected-focus-page .connected-records small,
+.connected-focus-page .connected-records article > span {
+  color: #777;
+}
+.connected-focus-page .connected-records select,
+.connected-focus-page .connected-records button {
+  border-color: #3a3a3a;
+  background: #222;
+  color: #aaa;
+}
+.connected-feedback textarea,
+.connected-feedback > input,
+.connected-effective-time input {
+  border-color: #3a3a3a;
+  background: #222;
+  color: #eee;
+}
+
+/* Trajectory remains recognizably ours while using the same compact shell. */
+.connected-trajectory,
+.connected-trajectory-memory {
+  max-width: 1180px;
+  padding-top: 28px;
+}
+.connected-trajectory > .connected-page-header h1 {
+  font-size: clamp(27px, 3vw, 38px);
+}
+
+@media (max-width: 1050px) {
+  .connected-task-layout.with-detail {
+    grid-template-columns: minmax(430px, 1fr) 370px;
+  }
+  .connected-focus-page {
+    grid-template-columns: minmax(420px, 58%) minmax(340px, 42%);
+  }
+  .connected-item-copy small {
+    display: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .connected-shell {
+    grid-template-columns: 50px minmax(0, 1fr);
+  }
+  .connected-sidebar {
+    display: none;
+  }
+  .connected-task-layout.with-detail {
+    display: block;
+  }
+  .connected-detail {
+    position: fixed;
+    z-index: 45;
+    top: 0;
+    right: 0;
+    width: min(430px, calc(100vw - 50px));
+    box-shadow: -16px 0 42px rgba(0, 0, 0, 0.1);
+  }
+  .connected-focus-page {
+    display: block;
+  }
+  .connected-focus-stage {
+    min-height: 610px;
+  }
+  .connected-today-summary,
+  .connected-focus-page > .connected-records {
+    border-left: 0;
+    border-top: 1px solid #2a2a2a;
+  }
+}
+
+@media (max-width: 600px) {
+  .connected-shell,
+  .connected-shell.connected-view-focus,
+  .connected-shell.connected-view-trajectory {
+    display: block;
+  }
+  .connected-app-rail {
+    display: none;
+  }
+  .connected-task-main {
+    padding-inline: 10px;
+    padding-bottom: 88px;
+  }
+  .connected-list-context,
+  .connected-page-header .connected-secondary:not(:last-child),
+  .connected-task-commitment-hint small {
+    display: none;
+  }
+  .connected-detail {
+    width: 100vw;
+  }
+  .connected-focus-page > .connected-page-header {
+    padding-inline: 15px;
+  }
+  .connected-focus-stage {
+    min-height: 560px;
+    padding: 18px;
+  }
+  .connected-focus-setup {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
 @media (max-width: 480px) {
   .connected-sidebar > nav button {
     display: flex;
@@ -3966,5 +5593,80 @@ select {
   }
   .connected-directions > div:last-child {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Late product controls keep the V1 density and focus-room composition. */
+.connected-task-main .connected-task-commitment-hint,
+.connected-task-main .connected-onboarding-card {
+  min-height: auto;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  box-shadow: none;
+}
+.connected-task-main .connected-task-commitment-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.connected-task-main .connected-task-commitment-hint p {
+  margin: 0;
+}
+.connected-task-main .connected-task-commitment-hint small {
+  margin-left: auto;
+}
+.connected-task-main .connected-onboarding-card h2 {
+  margin: 2px 0;
+  font: 600 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.connected-detail .connected-detail-actions button,
+.connected-detail .connected-danger {
+  min-height: 30px;
+  border-color: #e1e1e1;
+  border-radius: 6px;
+  font-size: 9px;
+}
+.connected-detail .connected-progress-history {
+  border-color: #ececec;
+}
+.connected-focus-page > .connected-today-summary {
+  grid-column: 2;
+  grid-row: 1/3;
+  margin: 0;
+  padding: 24px 20px 20px;
+  border-left: 1px solid #2a2a2a;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  align-content: start;
+}
+.connected-focus-page > .connected-today-summary article {
+  min-height: 84px;
+  padding: 14px;
+  border: 0;
+  border-radius: 7px;
+  background: #202020;
+}
+.connected-focus-page > .connected-today-summary span,
+.connected-focus-page > .connected-today-summary small {
+  color: #777;
+  font-size: 9px;
+}
+.connected-focus-page > .connected-today-summary b {
+  margin: 10px 0 4px;
+  color: #e7e7e7;
+  font: 600 22px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.connected-focus-page > .connected-records article {
+  min-height: 58px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(90px, 130px) auto auto;
+  border-bottom-color: #2a2a2a;
+}
+
+@media (max-width: 860px) {
+  .connected-focus-page > .connected-today-summary {
+    border-left: 0;
+    border-top: 1px solid #2a2a2a;
   }
 }

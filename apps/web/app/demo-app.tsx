@@ -1,6 +1,27 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import {
+  Bell,
+  CalendarDays,
+  CalendarRange,
+  CheckSquare,
+  ChevronRight,
+  CircleHelp,
+  Clock3,
+  Folder,
+  Inbox,
+  ListTodo,
+  MoreHorizontal,
+  Play,
+  Plus,
+  RefreshCw,
+  Search,
+  Settings,
+  Sparkles,
+  Sun,
+  Timer,
+} from "lucide-react";
 
 type View = "tasks" | "lists" | "focus" | "trajectory";
 type Task = {
@@ -46,6 +67,7 @@ export default function DemoApp() {
   const [view, setView] = useState<View>("tasks");
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [newTask, setNewTask] = useState("");
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(1);
   const [focusTaskId, setFocusTaskId] = useState<number>(1);
   const [mode, setMode] = useState<"countdown" | "stopwatch">("countdown");
   const [seconds, setSeconds] = useState(25 * 60);
@@ -58,6 +80,7 @@ export default function DemoApp() {
   const [nextFocus, setNextFocus] = useState([1, 2]);
 
   const focusTask = tasks.find((task) => task.id === focusTaskId) ?? tasks[0];
+  const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
   const completedCount = tasks.filter((task) => task.done).length;
 
   useEffect(() => {
@@ -95,8 +118,6 @@ export default function DemoApp() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const totalActual = useMemo(() => tasks.reduce((sum, task) => sum + task.actual, 0), [tasks]);
-
   function go(next: View) {
     setView(next);
     if (next !== "focus") setRunning(false);
@@ -115,6 +136,10 @@ export default function DemoApp() {
 
   function toggleTask(id: number) {
     setTasks((current) => current.map((task) => task.id === id ? { ...task, done: !task.done } : task));
+  }
+
+  function renameTask(id: number, title: string) {
+    setTasks((current) => current.map((task) => task.id === id ? { ...task, title } : task));
   }
 
   function startFocus(id: number) {
@@ -146,52 +171,69 @@ export default function DemoApp() {
   }
 
   return (
-    <main className="app-shell">
-      <aside className="sidebar">
-        <button className="brand" onClick={() => go("tasks")} aria-label="回到任务">
-          <span className="brand-mark"><i /><i /><i /></span>
-          <span>见时</span>
-        </button>
-
-        <nav className="primary-nav" aria-label="主导航">
-          {navItems.map((item) => (
-            <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => go(item.id)}>
-              <span className="nav-icon">{item.icon}</span>
-              <span>{item.label}</span>
-              {item.id === "trajectory" && <em>1</em>}
-            </button>
-          ))}
+    <main className={`dida-shell dida-view-${view}`}>
+      <aside className="dida-app-rail" aria-label="应用导航">
+        <button className="dida-avatar" aria-label="账户">F</button>
+        <nav>
+          <button className={view === "tasks" || view === "lists" ? "active" : ""} onClick={() => go("tasks")} aria-label="任务"><CheckSquare /></button>
+          <button onClick={() => go("tasks")} aria-label="日历"><CalendarDays /></button>
+          <button className={view === "focus" ? "active" : ""} onClick={() => go("focus")} aria-label="专注"><Timer /></button>
+          <button className={view === "trajectory" ? "active" : ""} onClick={() => go("trajectory")} aria-label="轨迹"><Sparkles /></button>
+          <button aria-label="搜索"><Search /></button>
         </nav>
-
-        <div className="list-nav">
-          <p>我的清单</p>
-          {Object.entries(listColors).map(([label, color]) => (
-            <button key={label} onClick={() => go("lists")}>
-              <span className={`list-dot ${color}`} />{label}
-              <small>{tasks.filter((task) => task.list === label && !task.done).length || ""}</small>
-            </button>
-          ))}
-        </div>
-
-        <div className="sidebar-bottom">
-          <button className="avatar">F</button>
-          <div><b>Forrest</b><span>正在形成第 4 周轨迹</span></div>
-          <button className="more-button" aria-label="更多">•••</button>
+        <div className="dida-rail-bottom">
+          <button aria-label="同步"><RefreshCw /></button>
+          <button aria-label="通知"><Bell /></button>
+          <button aria-label="设置"><Settings /></button>
+          <button aria-label="帮助"><CircleHelp /></button>
         </div>
       </aside>
 
-      <section className="workspace">
+      {(view === "tasks" || view === "lists") && (
+        <aside className="dida-list-sidebar">
+          <div className="dida-shortcuts">
+            <button><span className="coral"><Sparkles /></span><small>轨迹</small></button>
+            <button><span className="gold"><Sun /></span><small>今日</small></button>
+            <button><span className="violet"><ListTodo /></span><small>待做</small></button>
+            <button><span className="mint"><Clock3 /></span><small>进展</small></button>
+          </div>
+
+          <nav className="dida-smart-lists" aria-label="智能清单">
+            <button className={view === "tasks" ? "active" : ""} onClick={() => go("tasks")}><Sun /><span>今天</span><small>{tasks.filter((task) => !task.done).length}</small></button>
+            <button onClick={() => go("tasks")}><CalendarRange /><span>最近 7 天</span><small>{tasks.length + 3}</small></button>
+            <button className={view === "lists" ? "active" : ""} onClick={() => go("lists")}><Inbox /><span>收集箱</span><small>{tasks.length}</small></button>
+            <button onClick={() => go("trajectory")}><Sparkles /><span>轨迹摘要</span><small>1</small></button>
+          </nav>
+
+          <div className="dida-sidebar-section">
+            <div><span>清单</span><button aria-label="添加清单"><Plus /></button></div>
+            <button className="dida-folder"><ChevronRight /><Folder /><span>工作</span><small>{tasks.filter((task) => !task.done).length}</small></button>
+            {Object.entries(listColors).map(([label, color]) => (
+              <button className="dida-list-entry" key={label} onClick={() => go("lists")}>
+                <span className={`list-dot ${color}`} />{label}
+                <small>{tasks.filter((task) => task.list === label && !task.done).length || ""}</small>
+              </button>
+            ))}
+          </div>
+
+          <button className="dida-new-list"><Plus /> 新建清单</button>
+        </aside>
+      )}
+
+      <section className="workspace dida-workspace">
         {view === "tasks" && (
           <TodayView
             tasks={tasks}
             completedCount={completedCount}
-            totalActual={totalActual}
             newTask={newTask}
             setNewTask={setNewTask}
             addTask={addTask}
             toggleTask={toggleTask}
             startFocus={startFocus}
             onTrajectory={() => go("trajectory")}
+            selectedTask={selectedTask}
+            selectTask={setSelectedTaskId}
+            renameTask={renameTask}
           />
         )}
         {view === "lists" && <ListsView tasks={tasks} toggleTask={toggleTask} startFocus={startFocus} />}
@@ -255,72 +297,66 @@ export default function DemoApp() {
   );
 }
 
-function TodayView({ tasks, completedCount, totalActual, newTask, setNewTask, addTask, toggleTask, startFocus, onTrajectory }: {
-  tasks: Task[]; completedCount: number; totalActual: number; newTask: string; setNewTask: (value: string) => void;
+function TodayView({ tasks, completedCount, newTask, setNewTask, addTask, toggleTask, startFocus, onTrajectory, selectedTask, selectTask, renameTask }: {
+  tasks: Task[]; completedCount: number; newTask: string; setNewTask: (value: string) => void;
   addTask: (event: FormEvent) => void; toggleTask: (id: number) => void; startFocus: (id: number) => void; onTrajectory: () => void;
+  selectedTask: Task | null; selectTask: (id: number | null) => void; renameTask: (id: number, title: string) => void;
 }) {
-  const keyTasks = tasks.filter((task) => task.key);
-  const laterTasks = tasks.filter((task) => !task.key);
+  const openTasks = tasks.filter((task) => !task.done);
+  const doneTasks = tasks.filter((task) => task.done);
   return (
-    <div className="today-layout">
-      <div className="today-main">
-        <header className="page-header">
-          <div><span className="eyebrow">周三 · 8 月 12 日</span><h1>把今天，放回方向里。</h1></div>
-          <div className="header-actions"><button className="quiet-button">···</button><button className="avatar small">F</button></div>
+    <div className={`dida-task-layout ${selectedTask ? "with-detail" : ""}`}>
+      <section className="dida-task-pane">
+        <header className="dida-task-header">
+          <div><button aria-label="收起侧栏">☰</button><h1>今天</h1><span>{openTasks.length}</span></div>
+          <div><button onClick={onTrajectory} aria-label="查看轨迹"><Sparkles /></button><button aria-label="排序">⇅</button><button aria-label="更多"><MoreHorizontal /></button></div>
         </header>
 
-        <section className="direction-strip">
-          <div className="direction-kicker"><span className="pulse-dot" />本周方向</div>
-          <div><h2>验证时间管理产品的核心问题</h2><p>已识别 5 条有效证据 · 还有 2 个工作日</p></div>
-          <div className="direction-progress"><span><i style={{ width: "64%" }} /></span><b>正在形成</b></div>
-        </section>
-
-        <section className="task-section">
-          <div className="section-title"><div><span>01</span><h2>今日重点</h2></div><p>{keyTasks.filter((task) => !task.done).length} 个恰到好处</p></div>
-          <div className="key-task-list">
-            {keyTasks.map((task, index) => (
-              <article className={`task-row ${task.done ? "done" : ""}`} key={task.id}>
-                <button className="task-check" onClick={() => toggleTask(task.id)} aria-label={`${task.done ? "恢复" : "完成"}${task.title}`}>{task.done ? "✓" : index + 1}</button>
-                <div className="task-copy"><h3>{task.title}</h3><p><span className={`list-dot ${listColors[task.list] ?? "gray"}`} />{task.list}<em>{task.meta}</em></p></div>
-                {task.actual > 0 && <span className="actual-time">{task.actual >= 60 ? `${Math.floor(task.actual / 60)}h ${task.actual % 60}m` : `${task.actual}m`}</span>}
-                <button className="focus-button" onClick={() => startFocus(task.id)}><i />专注</button>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <form className="quick-add" onSubmit={addTask}>
-          <span>＋</span><input aria-label="快速添加任务" value={newTask} onChange={(event) => setNewTask(event.target.value)} placeholder="快速添加任务，按 Enter 保存" /><button>添加</button>
+        <form className="dida-task-composer" onSubmit={addTask}>
+          <Plus />
+          <input aria-label="快速添加任务" value={newTask} onChange={(event) => setNewTask(event.target.value)} placeholder="添加任务" />
+          <button>添加</button>
         </form>
 
-        <section className="later-section">
-          <div className="section-title compact"><div><span>02</span><h2>稍后</h2></div><p>{laterTasks.length} 项</p></div>
-          {laterTasks.map((task) => (
-            <article className={`later-task ${task.done ? "done" : ""}`} key={task.id}>
-              <button className="plain-check" onClick={() => toggleTask(task.id)}>{task.done ? "✓" : ""}</button><span>{task.meta.split(" · ")[0]}</span><h3>{task.title}</h3><em>{task.meta.split(" · ")[1]}</em>
+        <div className="dida-task-list">
+          <div className="dida-group-heading"><span>今天</span><small>{openTasks.length}</small></div>
+          {openTasks.map((task) => (
+            <article className={`dida-task-row ${selectedTask?.id === task.id ? "selected" : ""}`} key={task.id}>
+              <button className="dida-check" onClick={() => toggleTask(task.id)} aria-label={`完成${task.title}`} />
+              <button className="dida-task-copy" onClick={() => selectTask(task.id)}>
+                <b>{task.title}</b>
+                <small><span className={`list-dot ${listColors[task.list] ?? "gray"}`} />{task.list}{task.actual > 0 ? ` · 已投入 ${task.actual} 分钟` : ""}</small>
+              </button>
+              <span className="dida-row-meta">{task.meta}</span>
+              <button className="dida-row-focus" onClick={() => startFocus(task.id)} aria-label={`专注${task.title}`}><Play /></button>
             </article>
           ))}
-        </section>
-      </div>
 
-      <aside className="today-rail">
-        <div className="rail-date"><span>12</span><div><b>八月</b><em>2026</em></div></div>
-        <section className="evidence-card">
-          <span className="eyebrow amber-text">方向证据</span><h2>你的行动正在<br />汇入这条方向</h2>
-          <div className="evidence-bars">{[48, 62, 82, 38, 58, 28, 66].map((height, index) => <i key={index} className={index === 2 ? "today-bar" : ""} style={{ height }} />)}</div>
-          <div className="evidence-legend"><span>周一</span><span>今天</span><span>周日</span></div>
-          <div className="evidence-stat"><b>{Math.floor(totalActual / 60)}h {totalActual % 60}m</b><span>已投入</span><b>{completedCount + 5}</b><span>条证据</span></div>
-        </section>
-        <section className="agent-card">
-          <div className="agent-title"><span>✦</span><b>见时观察</b><em>中等把握</em></div>
-          <p>你今天的前两个重点，都在回答同一个问题：怎样让长期方向不再成为额外维护。</p>
-          <div className="agent-sources"><span>梳理 V1 核心流程</span><span>完成访谈提纲</span></div>
-          <button onClick={onTrajectory}>查看为什么 <span>→</span></button>
-        </section>
-        <section className="review-callout">
-          <div><span>周复盘</span><h3>周日为你整理</h3><p>预计只需 3 分钟确认</p></div><button onClick={onTrajectory}>预览</button>
-        </section>
-      </aside>
+          <details className="dida-completed" open={doneTasks.length > 0}>
+            <summary>已完成 <span>{doneTasks.length || completedCount}</span></summary>
+            {doneTasks.map((task) => <article className="dida-task-row done" key={task.id}><button className="dida-check" onClick={() => toggleTask(task.id)}>✓</button><button className="dida-task-copy" onClick={() => selectTask(task.id)}><b>{task.title}</b><small>{task.list}</small></button></article>)}
+          </details>
+        </div>
+      </section>
+
+      {selectedTask && (
+        <aside className="dida-task-detail">
+          <div className="dida-detail-toolbar">
+            <button className="dida-check" onClick={() => toggleTask(selectedTask.id)} aria-label="完成任务" />
+            <button><CalendarDays /> 设置日期</button>
+            <button aria-label="更多"><MoreHorizontal /></button>
+            <button className="dida-detail-close" onClick={() => selectTask(null)} aria-label="关闭详情">×</button>
+          </div>
+          <input className="dida-detail-title" value={selectedTask.title} onChange={(event) => renameTask(selectedTask.id, event.target.value)} />
+          <textarea className="dida-detail-note" defaultValue={`今天的推进重点\n\n- [ ] 完成最小闭环\n- [ ] 留下一条真实进展`} aria-label="任务笔记" />
+          <section className="dida-detail-progress">
+            <div><span><Clock3 /> 已投入</span><b>{selectedTask.actual || 0} 分钟</b></div>
+            <p>Agent 会在轨迹中结合任务、专注和进展解释这段投入。</p>
+            <button onClick={() => startFocus(selectedTask.id)}><Play /> 开始专注</button>
+          </section>
+          <footer><span className={`list-dot ${listColors[selectedTask.list] ?? "gray"}`} />{selectedTask.list}<button><MoreHorizontal /></button></footer>
+        </aside>
+      )}
     </div>
   );
 }
@@ -350,18 +386,25 @@ function FocusView({ task, tasks, taskId, setTaskId, mode, switchMode, seconds, 
   seconds: number; running: boolean; setRunning: (value: boolean) => void; reset: () => void; end: () => void;
 }) {
   const progress = mode === "countdown" ? 1 - seconds / (25 * 60) : Math.min(1, seconds / (50 * 60));
-  return <div className="focus-page">
-    <div className="focus-top"><span>正在专注</span><div className="mode-switch"><button className={mode === "countdown" ? "active" : ""} onClick={() => switchMode("countdown")}>倒计时</button><button className={mode === "stopwatch" ? "active" : ""} onClick={() => switchMode("stopwatch")}>正计时</button></div><button className="quiet-button">全屏 ↗</button></div>
-    <div className="focus-stage">
-      <div className="focus-orbit" style={{ "--progress": `${Math.round(progress * 360)}deg` } as React.CSSProperties}>
-        <div><span>{mode === "countdown" ? "本轮还剩" : "本轮投入"}</span><b>{formatClock(seconds)}</b><em>{mode === "countdown" ? "25 分钟专注" : "正计时"}</em></div>
+  return <div className="demo-focus-layout">
+    <section className="focus-page">
+      <div className="focus-top"><span>专注</span><div className="mode-switch"><button className={mode === "countdown" ? "active" : ""} onClick={() => switchMode("countdown")}>倒计时</button><button className={mode === "stopwatch" ? "active" : ""} onClick={() => switchMode("stopwatch")}>正计时</button></div><button className="quiet-button">全屏 ↗</button></div>
+      <div className="focus-stage">
+        <div className="focus-orbit" style={{ "--progress": `${Math.round(progress * 360)}deg` } as React.CSSProperties}>
+          <div><span>{mode === "countdown" ? "本轮还剩" : "本轮投入"}</span><b>{formatClock(seconds)}</b><em>{mode === "countdown" ? "25 分钟专注" : "正计时"}</em></div>
+        </div>
+        <select aria-label="选择专注任务" value={taskId} onChange={(event) => setTaskId(Number(event.target.value))}>{tasks.filter((item) => !item.done).map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select>
+        <div className="focus-task-name"><span className={`list-dot ${listColors[task.list] ?? "gray"}`} /><h1>{task.title}</h1></div>
+        <p>你不需要现在解释它的意义。先认真做完这一小段。</p>
+        <div className="focus-controls"><button className="minor-control" onClick={reset}>↺</button><button className="main-control" onClick={() => setRunning(!running)}>{running ? "暂停" : "继续"}<span>{running ? "Ⅱ" : "▶"}</span></button><button className="minor-control" onClick={end}>■</button></div>
       </div>
-      <select aria-label="选择专注任务" value={taskId} onChange={(event) => setTaskId(Number(event.target.value))}>{tasks.filter((item) => !item.done).map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select>
-      <div className="focus-task-name"><span className={`list-dot ${listColors[task.list] ?? "gray"}`} /><h1>{task.title}</h1></div>
-      <p>你不需要现在解释它的意义。先认真做完这一小段。</p>
-      <div className="focus-controls"><button className="minor-control" onClick={reset}>↺</button><button className="main-control" onClick={() => setRunning(!running)}>{running ? "暂停" : "继续"}<span>{running ? "Ⅱ" : "▶"}</span></button><button className="minor-control" onClick={end}>■</button></div>
-    </div>
-    <div className="focus-footer"><span>已为这项任务投入 {task.actual} 分钟</span><span>安静模式 · 通知已收起</span></div>
+      <div className="focus-footer"><span>已为这项任务投入 {task.actual} 分钟</span><span>安静模式 · 通知已收起</span></div>
+    </section>
+    <aside className="demo-focus-overview">
+      <h2>概览</h2>
+      <div className="demo-focus-facts"><article><span>今日番茄</span><b>3</b></article><article><span>今日专注时长</span><b>2h 35m</b></article></div>
+      <div className="demo-focus-records"><div><h3>专注记录</h3><button>＋</button></div>{tasks.filter((item) => item.actual > 0).map((item, index) => <article key={item.id}><i /><div><span>{index === 0 ? "14:10 - 15:34" : index === 1 ? "10:25 - 11:07" : "09:10 - 09:39"}</span><b>{item.title}</b></div><em>{item.actual}m</em></article>)}</div>
+    </aside>
   </div>;
 }
 

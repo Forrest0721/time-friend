@@ -11,12 +11,15 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: "见时 · 从行动中看见方向",
     description: "一款从任务与专注记录中学习，帮助你形成周复盘与长期方向的时间管理工具。",
-    icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
+    icons: {
+      icon: "/favicon.svg",
+      shortcut: "/favicon.svg",
+    },
     openGraph: {
       title: "见时 · 从行动中看见方向",
       description: "认真做事，方向会慢慢浮现。",
       type: "website",
-      images: [{ url: `${origin}/og.png`, width: 1731, height: 909, alt: "见时 · 从行动中，看见方向。" }],
+      images: [{ url: `${origin}/og.png`, width: 1726, height: 911, alt: "见时 · 从行动中，看见方向。" }],
     },
     twitter: {
       card: "summary_large_image",

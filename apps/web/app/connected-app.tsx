@@ -5,6 +5,22 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Dialog from "@radix-ui/react-dialog";
 import dynamic from "next/dynamic";
 import { v7 as uuidv7 } from "uuid";
+import {
+  Bell,
+  CalendarDays,
+  CalendarRange,
+  CheckSquare,
+  CircleHelp,
+  Clock3,
+  Inbox,
+  ListTodo,
+  RefreshCw,
+  Search,
+  Settings,
+  Sparkles,
+  Sun,
+  Timer,
+} from "lucide-react";
 
 import type {
   AgentRunDto,
@@ -552,16 +568,39 @@ export default function ConnectedApp() {
   }
 
   return (
-    <main className="connected-shell" aria-busy={busy}>
-      <aside className="connected-sidebar">
-        <button className="connected-brand" onClick={() => setView("tasks")}><span>见</span><b>见时</b><small>Time Friend</small></button>
-        <nav aria-label="主导航">
-          <NavButton active={view === "tasks"} label="任务" meta={`${activeTasks.length}`} onClick={() => setView("tasks")} />
-          <NavButton active={view === "focus"} label="专注" meta={activeFocus ? "进行中" : ""} onClick={() => setView("focus")} />
-          <NavButton active={view === "trajectory"} label="轨迹" meta={bootstrap.pendingReviews ? String(bootstrap.pendingReviews) : ""} onClick={() => setView("trajectory")} />
+    <main className={`connected-shell connected-view-${view}`} aria-busy={busy}>
+      <aside className="dida-app-rail connected-app-rail" aria-label="应用导航">
+        <button className="dida-avatar" aria-label="账户">{initials(bootstrap.user.name)}</button>
+        <nav>
+          <button className={view === "tasks" ? "active" : ""} onClick={() => setView("tasks")} aria-label="任务"><CheckSquare /></button>
+          <button onClick={() => setView("tasks")} aria-label="日历"><CalendarDays /></button>
+          <button className={view === "focus" ? "active" : ""} onClick={() => setView("focus")} aria-label="专注"><Timer /></button>
+          <button className={view === "trajectory" ? "active" : ""} onClick={() => setView("trajectory")} aria-label="轨迹"><Sparkles /></button>
+          <button aria-label="搜索"><Search /></button>
+        </nav>
+        <div className="dida-rail-bottom">
+          <button aria-label="同步"><RefreshCw /></button>
+          <button aria-label="通知"><Bell /></button>
+          <button aria-label="设置"><Settings /></button>
+          <button aria-label="帮助"><CircleHelp /></button>
+        </div>
+      </aside>
+
+      {view === "tasks" && <aside className="connected-sidebar">
+        <div className="connected-shortcuts dida-shortcuts">
+          <button onClick={() => setView("trajectory")}><span className="coral"><Sparkles /></span><small>轨迹</small></button>
+          <button><span className="gold"><Sun /></span><small>今日</small></button>
+          <button><span className="violet"><ListTodo /></span><small>待做</small></button>
+          <button><span className="mint"><Clock3 /></span><small>进展</small></button>
+        </div>
+        <nav className="connected-smart-lists" aria-label="智能清单">
+          <button className="active"><Sun /><span>今天</span><small>{activeTasks.length}</small></button>
+          <button><CalendarRange /><span>最近 7 天</span><small>{activeTasks.length}</small></button>
+          <button onClick={() => selectList(bootstrap.lists.find((list) => list.isInbox)?.id ?? null)}><Inbox /><span>收集箱</span><small>{countPending(bootstrap.items, bootstrap.lists.find((list) => list.isInbox)?.id ?? "")}</small></button>
+          <button onClick={() => setView("trajectory")}><Sparkles /><span>轨迹摘要</span><small>{bootstrap.pendingReviews || ""}</small></button>
         </nav>
         <div className="connected-lists">
-          <div className="connected-section-label"><span>空间</span><button onClick={() => createOrganization("folder")} aria-label="新建文件夹">＋</button></div>
+          <div className="connected-section-label"><span>清单</span><button onClick={() => createOrganization("folder")} aria-label="新建文件夹">＋</button></div>
           {bootstrap.folders.filter((folder) => !folder.archivedAt).map((folder) => (
             <section key={folder.id}>
               <div className="connected-organization-heading"><h3>{folder.name}</h3><OrganizationActions onCreate={() => createOrganization("list", folder.id)} onRename={() => updateOrganization("folder", folder, "rename")} onArchive={() => updateOrganization("folder", folder, "archive")} onUp={() => reorderOrganization("folder", folder.id, -1)} onDown={() => reorderOrganization("folder", folder.id, 1)} /></div>
@@ -576,7 +615,7 @@ export default function ConnectedApp() {
           <button className="connected-add-list" onClick={() => createOrganization("list")}>＋ 新清单</button>
         </div>
         <div className="connected-account"><span>{initials(bootstrap.user.name)}</span><div><b>{bootstrap.user.name}</b><small>{bootstrap.user.email}</small></div><p><button className={bootstrap.user.agentEnabled ? "agent-on" : ""} onClick={toggleAgent}>{bootstrap.user.agentEnabled ? "Agent 开" : "Agent 关"}</button><button onClick={exportAccountData}>导出</button><button onClick={() => void apiRequest("/api/auth/sign-out", { method: "POST" }).then(() => location.reload())}>退出</button><button className="delete-account" onClick={deleteAccount}>删号</button></p></div>
-      </aside>
+      </aside>}
 
       <section className="connected-workspace">
         {message && <div className="connected-message" role="status"><span>{message}</span><button onClick={() => setMessage(null)}>×</button></div>}
@@ -700,20 +739,24 @@ function TaskWorkspace({ data, selectedListId, selectedItem, onSelectItem, onCre
     await onReload();
   }
 
+  const pendingCount = items.filter((item) => item.kind === "task" && item.status === "pending").length;
+
   return <div className={`connected-task-layout ${selectedItem ? "with-detail" : ""}`}>
     <section className="connected-task-main">
-      <header className="connected-page-header"><div><span>快速组织，安静执行</span><h1>{list?.name ?? "行动"}</h1><p>{list?.learningPolicy === "exclude" ? "此清单不会进入 Agent 的统计、证据和记忆。" : "不需要先决定目标归属，真实行动会在轨迹里慢慢显现。"}</p></div><div><button className="connected-secondary" onClick={toggleLearning}>{list?.learningPolicy === "exclude" ? "恢复学习" : "排除学习"}</button><button className="connected-secondary" onClick={onCreateGroup}>＋ 分组</button></div></header>
+      <header className="connected-page-header"><div className="connected-title-bar"><button aria-label="收起侧栏">☰</button><h1>{list?.name ?? "行动"}</h1><small>{pendingCount}</small></div><div><button className="connected-secondary" onClick={toggleLearning}>{list?.learningPolicy === "exclude" ? "恢复学习" : "排除学习"}</button><button className="connected-secondary" onClick={onCreateGroup}>＋ 分组</button><button className="connected-secondary" aria-label="更多">•••</button></div></header>
+      <p className="connected-list-context">{list?.learningPolicy === "exclude" ? "此清单不会进入 Agent 的统计、证据和记忆。" : "任务照常完成；Agent 会在轨迹中解释它们与长期方向的关系。"}</p>
       {commitments.length > 0 && <section className="connected-task-commitment-hint"><span>本周想保留的方向</span><p>{commitments.map((entry) => entry.title).join(" · ")}</p><small>新任务不必手工关联；Agent 会从真实执行中判断贡献。</small></section>}
       {focusLearningNotice && <section className="connected-onboarding-card learned"><div><span>第一次行动证据已经留下</span><h2>这些任务、投入时间和结果，会在周轨迹里帮助你看见方向。</h2><p>Agent 日常保持安静；到复盘时，每个判断都可以展开证据并由你校正。</p></div><button onClick={onDismissFocusLearning}>知道了</button></section>}
       {data.items.length === 0 && <DismissibleOnboardingCard storageKey={onboardingKey(data.user.id, "empty-guide")} title="先写下一件真的要做的事" detail="例如：整理访谈提纲。你不需要先创建目标、领域或完整清单系统。" actionLabel="开始输入" onAction={() => document.querySelector<HTMLInputElement>('.connected-composer input[aria-label="标题"]')?.focus()} />}
       {firstPendingTask && !data.activeFocusSession && <DismissibleOnboardingCard storageKey={onboardingKey(data.user.id, "first-focus")} title={`围绕“${firstPendingTask.title}”留下一段真实投入`} detail="试试 25 分钟番茄；结束后只需选择完成、有推进、受阻或维持事务。" actionLabel="开始 25 分钟" onAction={() => void onStartFocus(firstPendingTask.id)} />}
       <form className="connected-composer" onSubmit={submit}>
-        <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={kind === "note" ? "记下一段说明、检查事项或资料" : "添加任务，按 Enter 保存"} aria-label="标题" />
-        <select value={kind} onChange={(event) => setKind(event.target.value as "task" | "note")}><option value="task">任务</option><option value="note">笔记</option></select>
-        <select aria-label="清单" value={targetListId} onChange={(event) => { setTargetListId(event.target.value); setGroupId(""); setParentTaskId(""); }}>{data.lists.filter((entry) => !entry.archivedAt).map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select>
-        <select aria-label="分组" value={groupId} onChange={(event) => setGroupId(event.target.value)}><option value="">无分组</option>{targetGroups.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select>
-        {kind === "task" && <><input aria-label="计划日期" type="date" value={plannedOn} onChange={(event) => setPlannedOn(event.target.value)} /><select aria-label="优先级" value={priority ?? "none"} onChange={(event) => setPriority(event.target.value as ItemDto["priority"])}><option value="none">无优先级</option><option value="low">低优先级</option><option value="medium">中优先级</option><option value="high">高优先级</option></select><select aria-label="父任务" value={parentTaskId} onChange={(event) => setParentTaskId(event.target.value)}><option value="">顶层任务</option>{targetTopLevel.map((entry) => <option key={entry.id} value={entry.id}>作为「{entry.title}」的子任务</option>)}</select></>}
-        <button>添加</button>
+        <div className="connected-composer-main"><span>＋</span><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={kind === "note" ? "记下一段说明、检查事项或资料" : "添加任务"} aria-label="标题" /><button>添加</button></div>
+        <details className="connected-composer-options"><summary>设置属性</summary><div>
+          <select value={kind} onChange={(event) => setKind(event.target.value as "task" | "note")}><option value="task">任务</option><option value="note">笔记</option></select>
+          <select aria-label="清单" value={targetListId} onChange={(event) => { setTargetListId(event.target.value); setGroupId(""); setParentTaskId(""); }}>{data.lists.filter((entry) => !entry.archivedAt).map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select>
+          <select aria-label="分组" value={groupId} onChange={(event) => setGroupId(event.target.value)}><option value="">无分组</option>{targetGroups.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select>
+          {kind === "task" && <><input aria-label="计划日期" type="date" value={plannedOn} onChange={(event) => setPlannedOn(event.target.value)} /><select aria-label="优先级" value={priority ?? "none"} onChange={(event) => setPriority(event.target.value as ItemDto["priority"])}><option value="none">无优先级</option><option value="low">低优先级</option><option value="medium">中优先级</option><option value="high">高优先级</option></select><select aria-label="父任务" value={parentTaskId} onChange={(event) => setParentTaskId(event.target.value)}><option value="">顶层任务</option>{targetTopLevel.map((entry) => <option key={entry.id} value={entry.id}>作为「{entry.title}」的子任务</option>)}</select></>}
+        </div></details>
       </form>
       {groupsWithUngrouped(groups).map((group) => {
         const current = topLevel.filter((item) => item.groupId === group.id);
@@ -1335,7 +1378,6 @@ function AuthPanel({ onAuthenticated }: { onAuthenticated(): Promise<void> }) {
   return <main className="connected-auth"><section><div className="connected-auth-brand"><span>见</span><div><b>见时</b><small>Time Friend</small></div></div><p className="connected-auth-kicker">你只管踏实做</p><h1>方向，会从真实行动里慢慢浮现。</h1><p>像清单工具一样快速记录任务，用番茄和正计时留下真实投入；每周由 Agent 提出有证据的理解，再由你确认。</p><div className="connected-auth-principles"><span>01 · 行动优先</span><span>02 · 证据可追溯</span><span>03 · 记忆由你确认</span></div></section><form onSubmit={submit}><div className="connected-segment"><button type="button" className={mode === "signin" ? "active" : ""} onClick={() => setMode("signin")}>登录</button><button type="button" className={mode === "signup" ? "active" : ""} onClick={() => setMode("signup")}>创建账户</button></div><h2>{mode === "signin" ? "欢迎回来" : "开始第一周"}</h2>{mode === "signup" && <label>你的名字<input value={name} onChange={(event) => setName(event.target.value)} required /></label>}<label>邮箱<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label><label>密码<input type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required /></label>{error && <p className="connected-auth-error">{error}</p>}<button className="connected-primary" disabled={busy}>{busy ? "请稍候…" : mode === "signin" ? "进入见时" : "创建并进入"}</button><small>你的任务正文、专注记录和 Agent 输出只存于自己的产品数据中。</small></form></main>;
 }
 
-function NavButton({ active, label, meta, onClick }: { active: boolean; label: string; meta: string; onClick(): void }) { return <button className={active ? "active" : ""} onClick={onClick}><i />{label}{meta && <small>{meta}</small>}</button>; }
 function ListButton({ list, selected, count, onClick }: { list: TaskListDto; selected: boolean; count: number; onClick(): void }) { return <button className={`connected-list-button ${selected ? "active" : ""}`} onClick={onClick}><i className={list.learningPolicy === "exclude" ? "excluded" : ""} />{list.name}<small>{count || ""}</small></button>; }
 function OrganizationActions({ compact = false, onCreate, onMove, onRename, onArchive, onUp, onDown }: { compact?: boolean; onCreate?: () => void; onMove?: () => void; onRename(): void; onArchive?: () => void; onUp(): void; onDown(): void }) { return <span className={`connected-organization-actions ${compact ? "compact" : ""}`}>{onCreate && <button onClick={onCreate} title="在此新建清单">＋</button>}<button onClick={onUp} title="上移">↑</button><button onClick={onDown} title="下移">↓</button>{onMove && <button onClick={onMove} title="移动到文件夹">移</button>}<button onClick={onRename} title="重命名">改</button>{onArchive && <button onClick={onArchive} title="归档">藏</button>}</span>; }
 function Fact({ label, value, detail }: { label: string; value: string; detail: string }) { return <article><span>{label}</span><b>{value}</b><small>{detail}</small></article>; }
