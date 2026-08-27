@@ -6104,3 +6104,290 @@ select {
   .trajectory-workspace-v2 { grid-template-columns: 200px minmax(0,1fr); }
   .trajectory-settings-v2 { display: none; }
 }
+
+/* Fidelity pass: measured against Dida at a 1720px desktop viewport. */
+.dida-v2 {
+  --dida-blue: #5b76f7;
+  --dida-blue-soft: rgba(91, 118, 247, .14);
+  --dida-text: rgba(255, 255, 255, .92);
+  --dida-muted: rgba(255, 255, 255, .42);
+  --dida-faint: rgba(255, 255, 255, .24);
+  --dida-line: rgba(255, 255, 255, .075);
+  --dida-hover: rgba(255, 255, 255, .065);
+  --dida-bg: #1c1c1c;
+  --dida-panel: #202020;
+  --dida-panel-2: #232323;
+  --dida-rail: #202020;
+  width: 100vw;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+  color-scheme: dark;
+  font-family: "Color Emoji", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, "PingFang SC", sans-serif;
+  font-size: 14px;
+  letter-spacing: 0;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+.dida-v2.theme-light {
+  --dida-text: rgba(0, 0, 0, .88);
+  --dida-muted: rgba(0, 0, 0, .46);
+  --dida-faint: rgba(0, 0, 0, .25);
+  --dida-line: rgba(0, 0, 0, .075);
+  --dida-hover: rgba(0, 0, 0, .055);
+  --dida-bg: #fff;
+  --dida-panel: #fafafa;
+  --dida-panel-2: #f5f5f5;
+  --dida-rail: #f3f3f3;
+  color-scheme: light;
+}
+.dida-v2 button,
+.dida-v2 input,
+.dida-v2 textarea,
+.dida-v2 select { font: inherit; }
+.dida-v2 button { transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease, opacity 120ms ease, transform 120ms ease; }
+.dida-v2 button:active { transform: scale(.97); }
+.dida-v2 ::-webkit-scrollbar { width: 6px; height: 6px; }
+.dida-v2 ::-webkit-scrollbar-thumb { border-radius: 4px; background: rgba(255, 255, 255, .18); }
+.dida-v2 ::-webkit-scrollbar-track { background: transparent; }
+
+.dida-v2 .dida-app-rail { padding: 10px 0 12px; background: var(--dida-rail); }
+.dida-v2 .dida-avatar { width: 30px; height: 30px; margin-bottom: 15px; border-radius: 7px; font-size: 12px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.24); }
+.dida-v2 .dida-app-rail nav,
+.dida-v2 .dida-rail-bottom { gap: 10px; }
+.dida-v2 .dida-app-rail nav button,
+.dida-v2 .dida-rail-bottom button { width: 32px; height: 32px; border-radius: 7px; }
+.dida-v2 .dida-app-rail nav button.active { background: #f0f0f0; color: #292929; box-shadow: 0 1px 3px rgba(0,0,0,.22); }
+.dida-v2.theme-light .dida-app-rail nav button.active { background: #242424; color: #fff; }
+.dida-v2 .dida-app-rail svg,
+.dida-v2 .dida-rail-bottom svg { width: 18px; height: 18px; stroke-width: 1.85; }
+
+.dida-v2 .dida-list-sidebar { padding: 10px 10px 12px; background: var(--dida-bg); }
+.dida-v2 .dida-shortcuts { min-height: 137px; padding: 3px 2px 13px; gap: 3px 4px; align-content: start; }
+.dida-v2 .dida-shortcuts button { min-height: 56px; gap: 4px; color: var(--dida-muted); font-size: 11px; }
+.dida-v2 .dida-shortcuts button:hover { color: var(--dida-text); }
+.dida-v2 .dida-shortcuts button > span { width: 30px; height: 30px; border-radius: 7px; background: rgba(255,255,255,.055); }
+.dida-v2 .dida-shortcuts button > span.coral { color: #df8179; }
+.dida-v2 .dida-shortcuts button > span.gold { color: #d8b75e; }
+.dida-v2 .dida-shortcuts button > span.violet { color: #a493dd; }
+.dida-v2 .dida-shortcuts button > span.mint { color: #73b99d; }
+.dida-v2 .dida-shortcuts button > span.blue { color: #77a4dc; }
+.dida-v2 .dida-shortcuts button > span.indigo { color: #8499ef; }
+.dida-v2 .dida-shortcuts svg { width: 16px; height: 16px; stroke-width: 1.9; }
+.dida-v2 .dida-smart-lists { gap: 1px; padding: 8px 0 11px; }
+.dida-v2 .dida-smart-lists button,
+.dida-v2 .dida-folder,
+.dida-v2 .dida-list-entry,
+.dida-v2 .dida-new-list { height: 38px; padding: 0 10px; border-radius: 6px; font-size: 14px; font-weight: 400; }
+.dida-v2 .dida-smart-lists button.active,
+.dida-v2 .dida-list-entry.active { background: rgba(255,255,255,.09); font-weight: 500; }
+.dida-v2 .dida-smart-lists small,
+.dida-v2 .dida-folder small,
+.dida-v2 .dida-list-entry small { color: var(--dida-muted); font-size: 12px; }
+.dida-v2 .dida-sidebar-section { margin-top: 14px; }
+.dida-v2 .dida-sidebar-section > div { height: 30px; padding: 0 10px; color: var(--dida-faint); font-size: 12px; font-weight: 700; }
+.dida-v2 .dida-folder { grid-template-columns: 12px 17px minmax(0,1fr) auto; }
+.dida-v2 .dida-list-entry { padding-left: 28px; }
+.dida-v2 .dida-new-list { font-size: 13px; }
+
+.dida-v2 .dida-task-header { height: 61px; padding: 0 20px; }
+.dida-v2 .dida-task-layout.with-detail { grid-template-columns: minmax(520px, 1fr) minmax(360px, 35vw); }
+.dida-v2 .dida-task-header h1 { font-size: 20px; font-weight: 600; line-height: 28px; }
+.dida-v2 .dida-task-header span { color: var(--dida-muted); font-size: 13px; }
+.dida-v2 .dida-task-header button { width: 30px; height: 30px; }
+.dida-v2 .dida-task-composer { min-height: 40px; margin: 0 20px 12px; border-radius: 5px; background: rgba(255,255,255,.025); }
+.dida-v2 .dida-task-composer.expanded { background: transparent; box-shadow: inset 0 0 0 1px var(--dida-blue); }
+.dida-v2 .dida-task-composer > div { min-height: 40px; padding: 0 10px; }
+.dida-v2 .dida-task-composer > div > input { height: 40px; font-size: 14px; }
+.dida-v2 .dida-task-composer input::placeholder { color: rgba(255,255,255,.21); }
+.dida-v2.theme-light .dida-task-composer input::placeholder { color: rgba(0,0,0,.25); }
+.dida-v2 .dida-task-composer > div > button { flex: none; opacity: 0 !important; pointer-events: none; }
+.dida-v2 .dida-task-composer.has-value > div > button { opacity: 1 !important; pointer-events: auto; }
+.dida-v2 .dida-composer-actions { flex: none; display: flex; align-items: center; gap: 2px; }
+.dida-v2 .dida-composer-actions button,
+.dida-v2 .dida-composer-actions label { position: relative; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--dida-muted); display: grid; place-items: center; opacity: 1; }
+.dida-v2 .dida-composer-actions button:hover,
+.dida-v2 .dida-composer-actions button.active,
+.dida-v2 .dida-composer-actions label:hover { background: var(--dida-hover); color: var(--dida-text); }
+.dida-v2 .dida-composer-actions button.active { color: var(--dida-blue); }
+.dida-v2 .dida-composer-actions svg { width: 15px; height: 15px; }
+.dida-v2 .dida-composer-actions input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
+.dida-v2 .dida-task-list { padding: 0 20px 60px; }
+.dida-v2 .dida-group-heading { height: 33px; color: var(--dida-text); font-size: 14px; font-weight: 600; }
+.dida-v2 .dida-group-heading small { font-size: 12px; }
+.dida-v2 .dida-task-row { min-height: 40px; padding: 0 5px; gap: 8px; }
+.dida-v2 .dida-task-row.selected::before { left: -20px; }
+.dida-v2 .dida-task-copy { height: 39px; gap: 9px; }
+.dida-v2 .dida-task-copy b { font-size: 14px; line-height: 21px; }
+.dida-v2 .dida-task-copy small { color: var(--dida-muted); font-size: 11px; }
+.dida-v2 .dida-row-meta { color: var(--dida-muted); font-size: 12px; }
+.dida-v2 .dida-check { width: 16px; height: 16px; border-color: rgba(255,255,255,.45); border-radius: 4px; }
+.dida-v2 .dida-completed summary { height: 36px; color: var(--dida-text); font-size: 14px; }
+.dida-v2 .dida-completed summary span { font-size: 12px; }
+
+.dida-v2 .dida-detail-toolbar { height: 55px; padding: 0 16px; }
+.dida-v2 .dida-empty-detail { position: relative; display: grid; place-items: center; overflow: hidden; }
+.dida-v2 .dida-empty-detail > div { margin-top: 12vh; color: rgba(255,255,255,.055); display: grid; justify-items: center; gap: 12px; }
+.dida-v2 .dida-empty-detail svg { width: 112px; height: 112px; stroke-width: .65; }
+.dida-v2 .dida-empty-detail span { color: rgba(255,255,255,.12); font-size: 12px; }
+.dida-v2 .dida-detail-tabs { height: 39px; }
+.dida-v2 .dida-detail-tabs button { font-size: 13px; }
+.dida-v2 .dida-detail-title { margin: 18px 20px 8px; font-size: 20px; font-weight: 600; }
+.dida-v2 .dida-detail-note { min-height: 124px; padding: 9px 0; color: var(--dida-text); font-size: 14px; line-height: 1.7; }
+.dida-v2 .dida-checklist-block input { font-size: 14px; }
+.dida-v2 .dida-subtask-block > header { font-size: 12px; }
+.dida-v2 .dida-subtask-block > article > button:nth-child(2),
+.dida-v2 .dida-subtask-block form input { font-size: 13px; }
+.dida-v2 .dida-subtask-block > article > span { font-size: 11px; }
+.dida-v2 .dida-detail-focus-summary { padding: 14px; border-radius: 6px; }
+.dida-v2 .dida-detail-focus-summary > div { font-size: 14px; }
+.dida-v2 .dida-detail-focus-summary p { font-size: 12px; line-height: 1.55; }
+.dida-v2 .dida-detail-focus-summary button { height: 32px; font-size: 13px; }
+.dida-v2 .dida-tag-row button { font-size: 12px; }
+.dida-v2 .dida-activity-panel > form input,
+.dida-v2 .dida-activity-panel > form button { font-size: 13px; }
+.dida-v2 .dida-activity-list b { font-size: 13px; }
+.dida-v2 .dida-activity-list span { font-size: 11px; }
+
+.dida-v2 .modal-backdrop { z-index: 120; padding: 18px; background: rgba(0,0,0,.5); backdrop-filter: blur(7px); }
+.dida-v2 .dida-session-modal { width: min(460px, 100%); padding: 25px; border: 1px solid var(--dida-line); border-radius: 10px; background: #232323; box-shadow: 0 24px 70px rgba(0,0,0,.5); }
+.dida-v2 .dida-session-modal .modal-close { top: 14px; right: 14px; width: 30px; height: 30px; border-radius: 6px; background: transparent; color: var(--dida-muted); display: grid; place-items: center; }
+.dida-v2 .dida-session-modal .modal-close:hover { background: var(--dida-hover); color: var(--dida-text); }
+.dida-v2 .dida-session-modal .eyebrow { color: var(--dida-muted); font-size: 11px; font-weight: 500; letter-spacing: .04em; }
+.dida-v2 .dida-session-modal h2 { margin: 9px 0 7px; color: var(--dida-text); font: 600 22px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.dida-v2 .dida-session-modal .modal-task { color: #8fa2f9; font-size: 13px; }
+.dida-v2 .dida-session-modal .result-grid { margin: 22px 0; gap: 8px; }
+.dida-v2 .dida-session-modal .result-grid button { height: 66px; border: 1px solid var(--dida-line); border-radius: 7px; background: transparent; color: var(--dida-muted); gap: 6px; font-size: 12px; }
+.dida-v2 .dida-session-modal .result-grid button span { color: var(--dida-muted); font-size: 16px; }
+.dida-v2 .dida-session-modal .result-grid button:hover { border-color: rgba(255,255,255,.2); color: var(--dida-text); }
+.dida-v2 .dida-session-modal .result-grid button.selected { border-color: var(--dida-blue); background: var(--dida-blue-soft); color: #aab7ff; font-weight: 500; }
+.dida-v2 .dida-session-modal .result-grid button.selected span { color: #aab7ff; }
+.dida-v2 .dida-session-modal .note-label { color: var(--dida-text); font-size: 12px; font-weight: 500; }
+.dida-v2 .dida-session-modal .note-label em { color: var(--dida-muted); font-size: 11px; }
+.dida-v2 .dida-session-modal textarea { min-height: 86px; margin: 7px 0 18px; padding: 11px; border: 1px solid var(--dida-line); border-radius: 7px; background: #1c1c1c; color: var(--dida-text); font-size: 13px; line-height: 1.55; }
+.dida-v2 .dida-session-modal textarea:focus { border-color: var(--dida-blue); }
+.dida-v2 .dida-session-modal .primary-action.full { width: 100%; height: 38px; border: 0; border-radius: 6px; background: var(--dida-blue); color: #fff; font-size: 13px; font-weight: 500; box-shadow: none; }
+.dida-v2 .dida-session-modal .privacy-note { margin: 13px 8px 0; color: var(--dida-muted); font-size: 11px; }
+
+.focus-workspace-v2 { grid-template-columns: minmax(520px, 60%) minmax(390px, 40%); background: var(--dida-bg); color: var(--dida-text); }
+.focus-main-v2 { border-color: var(--dida-line); }
+.focus-main-v2 > header { height: 61px; padding: 0 25px; }
+.focus-main-v2 > header h1 { font-size: 20px; font-weight: 600; }
+.focus-main-v2 > header > div:last-child button { height: 30px; color: var(--dida-muted); }
+.focus-archive-tabs { padding: 3px; background: rgba(255,255,255,.055); }
+.focus-archive-tabs button { min-width: 78px; height: 29px; color: var(--dida-muted); font-size: 13px; }
+.focus-archive-tabs button.active { background: rgba(255,255,255,.075); color: var(--dida-text); }
+.focus-project-list { height: calc(100vh - 137px); padding: 0 12px 80px 25px; }
+.focus-project-list article { min-height: 54px; padding: 0 11px; border-color: var(--dida-line); grid-template-columns: 34px minmax(0,1fr) auto 28px; }
+.focus-project-list article:hover,
+.focus-project-list article.selected { background: rgba(255,255,255,.055); }
+.focus-project-list article > div b { font-size: 14px; font-weight: 400; }
+.focus-project-list article em { color: var(--dida-muted); font-size: 13px; }
+.focus-project-icon { width: 32px; height: 32px; border: 1px solid rgba(255,255,255,.14); color: rgba(255,255,255,.9); box-shadow: inset 0 1px 0 rgba(255,255,255,.15); }
+.focus-project-icon.amber { background: linear-gradient(145deg,#95804b,#62532f); color: #fff2c5; }
+.focus-project-icon.violet { background: linear-gradient(145deg,#7766a5,#4d426d); color: #eee9ff; }
+.focus-project-icon.indigo { background: linear-gradient(145deg,#647fb7,#3e527e); color: #edf2ff; }
+.focus-project-icon.sage { background: linear-gradient(145deg,#5f9179,#3d614f); color: #e9fff4; }
+.focus-project-icon.gray { background: linear-gradient(145deg,#636363,#414141); color: #f0f0f0; }
+.focus-project-icon svg { width: 16px; height: 16px; stroke-width: 2; }
+.focus-bottom-dock { min-height: 76px; padding: 0 21px; border-color: var(--dida-line); background: rgba(29,29,29,.98); grid-template-columns: 36px auto minmax(0,1fr) 44px; gap: 11px; }
+.focus-bottom-dock > div small { color: var(--dida-muted); font-size: 12px; }
+.focus-bottom-dock > div b { margin-top: 2px; font-size: 22px; font-weight: 400; letter-spacing: .2px; }
+.focus-dock-task { justify-self: end; margin-right: 10px; color: var(--dida-muted); font-size: 12px; }
+.focus-bottom-dock .dock-play { width: 42px; height: 42px; background: var(--dida-blue); box-shadow: 0 4px 16px rgba(91,118,247,.28); }
+.focus-stage-v2 .mode-switch { margin-bottom: 26px; padding: 3px; border-radius: 18px; background: rgba(255,255,255,.055); }
+.focus-stage-v2 .mode-switch button { min-width: 68px; height: 30px; padding: 0 12px; border-radius: 15px; color: var(--dida-muted); font-size: 13px; }
+.focus-stage-v2 .mode-switch button.active { background: rgba(255,255,255,.085); color: var(--dida-text); }
+.focus-stage-v2 .focus-orbit { width: min(39vh, 320px); height: min(39vh, 320px); padding: 3px; background: conic-gradient(var(--dida-blue) var(--progress), rgba(255,255,255,.11) 0); box-shadow: 0 18px 55px rgba(0,0,0,.18); }
+.focus-stage-v2 .focus-orbit > div { border: 8px solid var(--dida-bg); background: var(--dida-bg); }
+.focus-stage-v2 .focus-orbit span { color: var(--dida-muted); font-size: 11px; letter-spacing: .08em; }
+.focus-stage-v2 .focus-orbit b { margin: 12px 0; color: var(--dida-text); font: 300 68px/1 system-ui, -apple-system, "Segoe UI", sans-serif; letter-spacing: -2px; }
+.focus-stage-v2 .focus-orbit em { color: var(--dida-muted); font-size: 12px; }
+.focus-stage-v2 select { margin-top: 22px; color: var(--dida-muted); font-size: 12px; }
+.focus-stage-v2 h2 { margin: 12px 0 22px; font-size: 20px; font-weight: 500; }
+.focus-stage-v2 .focus-controls { gap: 15px; }
+.focus-stage-v2 .minor-control { width: 44px; height: 44px; border-color: rgba(255,255,255,.28); color: var(--dida-muted); }
+.focus-stage-v2 .main-control { height: 50px; min-width: 140px; border-radius: 25px; font-size: 14px; font-weight: 500; box-shadow: 0 8px 24px rgba(91,118,247,.25); }
+.focus-overview-v2 { padding: 25px 21px; background: var(--dida-bg); }
+.focus-overview-v2 h2 { margin-bottom: 22px; font-size: 20px; font-weight: 600; }
+.focus-facts-v2 { gap: 12px; }
+.focus-facts-v2 article { min-height: 84px; padding: 14px; border-radius: 7px; background: rgba(255,255,255,.035); }
+.focus-facts-v2 span { color: var(--dida-muted); font-size: 13px; }
+.focus-facts-v2 b { margin-top: 9px; font-size: 25px; font-weight: 600; }
+.focus-records-v2 { margin-top: 56px; }
+.focus-records-v2 h3 { font-size: 18px; font-weight: 600; }
+.focus-records-v2 header button { color: var(--dida-muted); }
+.focus-records-v2 .record-date { margin: 24px 0 8px; color: var(--dida-muted); font-size: 13px; }
+.focus-records-v2 > article { min-height: 70px; border-color: var(--dida-line); }
+.focus-records-v2 article span,
+.focus-records-v2 article em { color: var(--dida-muted); font-size: 12px; }
+.focus-records-v2 article b { margin-top: 5px; font-size: 14px; font-weight: 500; }
+
+.trajectory-workspace-v2 { grid-template-columns: 240px minmax(560px,1fr) minmax(310px,31%); background: var(--dida-bg); color: var(--dida-text); }
+.trajectory-nav-v2,
+.trajectory-document-v2,
+.trajectory-document-v2 > header { border-color: var(--dida-line); }
+.trajectory-nav-v2 > header { height: 61px; padding: 0 20px; }
+.trajectory-nav-v2 > header h1 { font-size: 20px; font-weight: 600; }
+.trajectory-period-tabs { margin: 0 12px 16px; padding: 3px; border-radius: 6px; }
+.trajectory-period-tabs button { height: 30px; font-size: 13px; }
+.trajectory-nav-v2 nav > span { padding: 9px; font-size: 12px; font-weight: 600; }
+.trajectory-nav-v2 nav button,
+.trajectory-nav-v2 footer button { min-height: 58px; padding: 8px 10px; grid-template-columns: 18px minmax(0,1fr) auto; }
+.trajectory-nav-v2 nav svg,
+.trajectory-nav-v2 footer svg { width: 16px; }
+.trajectory-nav-v2 nav b { font-size: 14px; font-weight: 500; }
+.trajectory-nav-v2 nav small { margin-top: 4px; font-size: 12px; }
+.trajectory-nav-v2 nav button > span,
+.trajectory-nav-v2 footer small,
+.trajectory-nav-v2 footer button span { font-size: 12px; }
+.trajectory-document-v2 > header { height: 61px; padding: 0 18px; }
+.trajectory-document-v2 > header h2 { font-size: 20px; font-weight: 600; }
+.trajectory-formatbar { height: 39px; gap: 19px; color: var(--dida-muted); font-size: 14px; }
+.trajectory-report-v2 { max-width: 960px; padding: 26px 0 80px; }
+.trajectory-report-v2 > h1,
+.memory-surface-v2 > h1 { font-size: 24px; font-weight: 650; }
+.trajectory-lead,
+.trajectory-section-copy,
+.memory-surface-v2 > p { margin: 8px 0 24px; font-size: 13px; line-height: 1.65; }
+.trajectory-facts-v2 { border-color: var(--dida-line); border-radius: 7px; }
+.trajectory-facts-v2 > div { min-height: 102px; padding: 16px; border-color: var(--dida-line); background: rgba(255,255,255,.025); }
+.trajectory-facts-v2 span,
+.trajectory-facts-v2 small { font-size: 12px; }
+.trajectory-facts-v2 b { margin: 10px 0 8px; font-size: 24px; font-weight: 600; }
+.trajectory-report-v2 > h3 { margin: 38px 0 14px; font-size: 18px; font-weight: 600; }
+.trajectory-insights-v2 > article { padding: 20px 0; border-color: var(--dida-line); }
+.trajectory-insight-heading { grid-template-columns: 30px 1fr; gap: 10px; }
+.trajectory-insight-heading > span { font-size: 12px; }
+.trajectory-insight-heading small { margin-bottom: 6px; padding: 3px 7px; font-size: 11px; }
+.trajectory-insight-heading h4 { font-size: 16px; font-weight: 600; }
+.trajectory-insights-v2 > article > p { margin: 10px 0 10px 40px; font-size: 13px; line-height: 1.7; }
+.trajectory-evidence-toggle { margin-left: 40px; font-size: 12px; }
+.trajectory-evidence-toggle svg { width: 13px; }
+.trajectory-evidence-list { margin: 12px 0 12px 40px; padding: 7px; }
+.trajectory-evidence-list button { min-height: 38px; font-size: 12px; }
+.trajectory-evidence-list em { font-size: 11px; }
+.trajectory-decisions-v2 { margin: 14px 0 0 40px; }
+.trajectory-decisions-v2 button { height: 30px; padding: 0 11px; font-size: 12px; }
+.trajectory-next-v2 > button { min-height: 56px; padding: 0 13px; }
+.trajectory-next-v2 b { font-size: 14px; }
+.trajectory-next-v2 small { margin-top: 4px; font-size: 12px; }
+.trajectory-complete-v2 { min-height: 36px; margin-top: 16px; font-size: 13px; }
+.trajectory-settings-v2 { padding: 22px 18px; }
+.trajectory-settings-v2 > h2 { margin-bottom: 27px; font-size: 20px; font-weight: 600; }
+.trajectory-settings-v2 section { margin-bottom: 26px; }
+.trajectory-settings-v2 section h3 { margin-bottom: 8px; font-size: 12px; font-weight: 600; }
+.trajectory-settings-v2 label { min-height: 44px; padding: 0 10px; font-size: 14px; }
+.trajectory-settings-v2 label span,
+.trajectory-settings-v2 select { font-size: 12px; }
+.trajectory-settings-v2 > p { font-size: 12px; line-height: 1.65; }
+.memory-surface-v2 { max-width: 800px; padding: 30px 0 70px; }
+.memory-surface-v2 > section { padding: 22px 0; }
+.memory-surface-v2 > section > span { font-size: 11px; }
+.memory-surface-v2 > section h3 { margin: 8px 0; font-size: 16px; }
+.memory-surface-v2 > section p { font-size: 13px; }
+.memory-surface-v2 > section button { height: 30px; padding: 0 10px; font-size: 12px; }
+
+@media (max-width: 1180px) {
+  .trajectory-workspace-v2 { grid-template-columns: 210px minmax(500px,1fr) 280px; }
+}
