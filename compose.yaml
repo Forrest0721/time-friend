@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: time_friend
       POSTGRES_PASSWORD: time_friend
     ports:
-      - "5432:5432"
+      - "5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U time_friend -d time_friend"]
       interval: 3s
