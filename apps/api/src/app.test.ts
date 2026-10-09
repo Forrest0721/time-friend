@@ -52,6 +52,29 @@ afterEach(async () => {
   observabilitySpies.recordProductEvent.mockClear();
 });
 
+describe("service health API", () => {
+  it("distinguishes process liveness from dependency readiness", async () => {
+    const readinessCheck = vi.fn(async () => undefined);
+    const { app } = await setup({ readinessCheck });
+
+    const live = await app.inject({ method: "GET", url: "/health" });
+    const ready = await app.inject({ method: "GET", url: "/ready" });
+
+    expect(live.statusCode).toBe(200);
+    expect(ready.statusCode).toBe(200);
+    expect(readinessCheck).toHaveBeenCalledOnce();
+  });
+
+  it("reports unavailable when a readiness dependency fails", async () => {
+    const { app } = await setup({ readinessCheck: async () => { throw new Error("database unavailable"); } });
+
+    const response = await app.inject({ method: "GET", url: "/ready" });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ ok: false });
+  });
+});
+
 describe("task API", () => {
   it("rejects unauthenticated access with RFC-style problem details", async () => {
     const { app } = await setup({ authenticated: false });
@@ -645,7 +668,7 @@ describe("account privacy API", () => {
   });
 });
 
-async function setup(options: { authenticated?: boolean; agentEnabled?: boolean; allowedOrigins?: string[]; createItemResult?: Item; events?: TaskEvent[] } = {}) {
+async function setup(options: { authenticated?: boolean; agentEnabled?: boolean; allowedOrigins?: string[]; createItemResult?: Item; events?: TaskEvent[]; readinessCheck?: () => Promise<void> } = {}) {
   const item = options.createItemResult ?? taskFixture();
   const tasks = taskStub(item, options.events ?? []);
   const execution = executionStub(item);
@@ -676,7 +699,11 @@ async function setup(options: { authenticated?: boolean; agentEnabled?: boolean;
           },
     idempotency: memoryIdempotency(),
   };
-  const app = await createApp(dependencies, { logger: false, allowedOrigins: options.allowedOrigins });
+  const app = await createApp(dependencies, {
+    logger: false,
+    allowedOrigins: options.allowedOrigins,
+    readinessCheck: options.readinessCheck,
+  });
   openApps.push(app);
   return { app, tasks, execution, trajectory, trajectoryReviews, trajectoryFeedback, preferences, privacy };
 }

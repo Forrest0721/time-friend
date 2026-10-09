@@ -106,6 +106,9 @@ const app = await createApp(
     logger: true,
     allowedOrigins: configuration.allowedOrigins,
     exposeDocumentation: configuration.nodeEnv !== "production",
+    readinessCheck: async () => {
+      await database.pool.query("select 1");
+    },
   },
 );
 

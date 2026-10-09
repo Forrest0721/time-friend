@@ -1,19 +1,142 @@
+x-app-environment: &app-environment
+  DATABASE_URL: postgresql://${POSTGRES_USER:-time_friend}:${POSTGRES_PASSWORD:-time_friend}@postgres:5432/${POSTGRES_DB:-time_friend}
+  TRAJECTORY_PROVIDER: ${TRAJECTORY_PROVIDER:-openai}
+  TRAJECTORY_MODEL: ${TRAJECTORY_MODEL:-gpt-5-mini}
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  SENTRY_DSN: ${SENTRY_DSN:-}
+
 services:
   postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_DB: time_friend
-      POSTGRES_USER: time_friend
-      POSTGRES_PASSWORD: time_friend
+      POSTGRES_DB: ${POSTGRES_DB:-time_friend}
+      POSTGRES_USER: ${POSTGRES_USER:-time_friend}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-time_friend}
     ports:
-      - "5433:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U time_friend -d time_friend"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 3s
       timeout: 3s
       retries: 20
+      start_period: 5s
     volumes:
       - time_friend_postgres:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  migrate:
+    image: time-friend-api:quickstart
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_PACKAGE: "@time-friend/api"
+    command: ["pnpm", "--filter", "@time-friend/db", "run", "migrate"]
+    environment:
+      <<: *app-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    image: time-friend-api:quickstart
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_PACKAGE: "@time-friend/api"
+    environment:
+      <<: *app-environment
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-time-friend-local-quickstart-secret-change-before-cloud}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:4000}
+      WEB_ORIGINS: ${WEB_ORIGINS:-http://localhost:3000}
+      HOST: 0.0.0.0
+      PORT: 4000
+    ports:
+      - "127.0.0.1:${API_PORT:-4000}:4000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4000/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 15s
+
+  worker:
+    image: time-friend-worker:quickstart
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_PACKAGE: "@time-friend/worker"
+    environment:
+      <<: *app-environment
+      HEALTH_HOST: 0.0.0.0
+      HEALTH_PORT: 4001
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      TRAJECTORY_REQUEST_TIMEOUT_MS: ${TRAJECTORY_REQUEST_TIMEOUT_MS:-120000}
+      TRAJECTORY_OPENAI_INPUT_USD_PER_MILLION_TOKENS: ${TRAJECTORY_OPENAI_INPUT_USD_PER_MILLION_TOKENS:-}
+      TRAJECTORY_OPENAI_OUTPUT_USD_PER_MILLION_TOKENS: ${TRAJECTORY_OPENAI_OUTPUT_USD_PER_MILLION_TOKENS:-}
+      TRAJECTORY_DEEPSEEK_INPUT_USD_PER_MILLION_TOKENS: ${TRAJECTORY_DEEPSEEK_INPUT_USD_PER_MILLION_TOKENS:-}
+      TRAJECTORY_DEEPSEEK_OUTPUT_USD_PER_MILLION_TOKENS: ${TRAJECTORY_DEEPSEEK_OUTPUT_USD_PER_MILLION_TOKENS:-}
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4001/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 35s
+
+  web:
+    image: time-friend-web:quickstart
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_PACKAGE: "@time-friend/web"
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+    environment:
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+    depends_on:
+      api:
+        condition: service_healthy
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 15s
 
 volumes:
   time_friend_postgres:

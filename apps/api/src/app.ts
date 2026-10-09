@@ -25,6 +25,7 @@ export interface CreateAppOptions {
   logger?: boolean;
   allowedOrigins?: readonly string[];
   exposeDocumentation?: boolean;
+  readinessCheck?: () => Promise<void>;
 }
 
 export async function createApp(dependencies: ApiDependencies, options: CreateAppOptions = {}): Promise<FastifyInstance> {
@@ -85,6 +86,14 @@ export async function createApp(dependencies: ApiDependencies, options: CreateAp
   }
 
   app.get("/health", async () => ({ ok: true }));
+  app.get("/ready", async (_request, reply) => {
+    try {
+      await options.readinessCheck?.();
+      return { ok: true };
+    } catch {
+      return reply.status(503).send({ ok: false });
+    }
+  });
   app.addHook("preHandler", async (request, reply) => {
     if (!request.url.startsWith("/api/v1")) return;
     if (["POST", "PATCH", "DELETE"].includes(request.method) && options.allowedOrigins) {

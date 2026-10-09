@@ -20,8 +20,11 @@
     "typecheck": "pnpm -r --parallel run typecheck && tsc --project tests/e2e/tsconfig.json",
     "db:generate": "pnpm --filter @time-friend/db run generate",
     "db:migrate": "pnpm --filter @time-friend/db run migrate",
-    "infra:up": "docker compose up -d",
-    "infra:down": "docker compose down",
+    "infra:up": "docker compose up -d postgres",
+    "infra:down": "docker compose stop postgres",
+    "quickstart:up": "docker compose up -d --build --wait",
+    "quickstart:down": "docker compose down",
+    "quickstart:verify": "bash scripts/verify-compose-quickstart.sh",
     "clean": "pnpm -r exec rm -rf .turbo dist .next && rm -rf node_modules"
   },
   "dependencies": {

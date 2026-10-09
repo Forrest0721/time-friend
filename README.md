@@ -26,7 +26,7 @@ Agent 使用 OpenAI Agents SDK，通过显式 Provider Registry 支持 OpenAI �
 
 ## 本地启动
 
-需要 Node.js 22+、pnpm 9+、Docker，以及当前轨迹 Provider 对应的 API key。
+需要 Node.js 22+、pnpm 9+ 和 Docker；生成 Agent 周轨迹时还需要当前 Provider 对应的 API key。
 
 1. 安装依赖：`pnpm install`
 2. 启动 PostgreSQL：`pnpm infra:up`
@@ -35,6 +35,29 @@ Agent 使用 OpenAI Agents SDK，通过显式 Provider Registry 支持 OpenAI �
 5. 启动应用：`pnpm dev`
 
 Web 默认运行在 `http://localhost:3000`，API 默认运行在 `http://localhost:4000`。若 Web 未配置 `NEXT_PUBLIC_API_URL`，页面会进入不依赖后端的交互演示模式；配置后会启用真实注册登录和完整数据闭环。
+
+## Docker Compose Quickstart
+
+只安装 Docker，也可以构建并启动完整的 PostgreSQL、迁移任务、API、Worker 和 Web：
+
+```bash
+docker compose up -d --build --wait
+```
+
+启动成功后访问 `http://localhost:3000`。所有宿主机端口只绑定到 `127.0.0.1`；PostgreSQL 数据保存在命名卷中。`docker compose down` 会保留数据，`docker compose down -v` 会永久删除本地数据库卷。
+
+默认 Quickstart 不需要模型密钥，任务、专注、账户和非 Agent 后台任务可以正常工作；生成周轨迹前，将 [`quickstart.env.example`](quickstart.env.example) 复制为 `.env` 并填写当前 Provider 的 API key：
+
+```bash
+cp quickstart.env.example .env
+docker compose up -d --build --wait
+```
+
+本地默认数据库密码与认证密钥只适用于回环地址上的开发验证，不可直接用于云端或公网部署。完整冷启动、迁移、重启和数据持久化验收可以重复执行：
+
+```bash
+pnpm run quickstart:verify
+```
 
 API 与 Worker 必须使用相同的非敏感目标配置。默认 OpenAI：
 
@@ -78,6 +101,8 @@ TRAJECTORY_PROVIDER=deepseek TRAJECTORY_MODEL=deepseek-v4-pro DEEPSEEK_API_KEY=.
 
 同一个根 `Dockerfile` 通过 `APP_PACKAGE` 构建三个独立镜像，例如：`docker build --build-arg APP_PACKAGE=@time-friend/api -t time-friend-api .`。Web、API 与 Worker 使用同一提交和锁文件；运行 API/Worker 时按各自 `.env.example` 注入环境变量。
 
+当前 Compose Quickstart 从本地源码构建这些镜像。发布供外部用户直接 `--pull always` 使用的多架构 GHCR 镜像属于后续发布流程，不是本地 Quickstart 的前置条件。
+
 ## 设计文档
 
 - [V1 PRD](work/PRD-v1-minimum-loop.md)
@@ -87,3 +112,4 @@ TRAJECTORY_PROVIDER=deepseek TRAJECTORY_MODEL=deepseek-v4-pro DEEPSEEK_API_KEY=.
 - [ADR-009：多 Provider Agent Runtime](work/adr/ADR-009-multi-provider-agent-runtime.md)
 - [滴答清单产品拆解](work/dida-product-teardown.md)
 - [产品调研](work/product-research-v0.md)
+- [低成本云部署方案（暂不实施）](work/deployment-low-cost-cloud-options.md)
