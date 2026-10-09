@@ -1,6 +1,7 @@
 import { DomainError } from "./errors.js";
 import { hashCanonical } from "./trajectory.js";
 import type { IdGenerator } from "./primitives.js";
+import type { WeekStartsOn } from "./user-preferences.js";
 
 export interface AccountDataExport {
   schemaVersion: "1";
@@ -10,7 +11,7 @@ export interface AccountDataExport {
     email: string;
     name: string;
     timezone: string;
-    weekStartsOn: number;
+    weekStartsOn: WeekStartsOn;
     agentEnabled: boolean;
     createdAt: string;
     updatedAt: string;

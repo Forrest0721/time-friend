@@ -39,6 +39,7 @@ export function createTimeFriendAuth(database: TimeFriendDatabase, configuration
       additionalFields: {
         timezone: { type: "string", required: false, defaultValue: "Asia/Shanghai", input: false },
         weekStartsOn: { type: "number", required: false, defaultValue: 1, input: false },
+        settingsRevision: { type: "number", required: false, defaultValue: 1, input: false },
         agentEnabled: { type: "boolean", required: false, defaultValue: true, input: false },
       },
     },
@@ -79,9 +80,16 @@ export async function resolveAuthenticatedUser(auth: TimeFriendAuth, request: Fa
     email: session.user.email,
     name: session.user.name,
     timezone: session.user.timezone ?? "Asia/Shanghai",
-    weekStartsOn: 1,
+    weekStartsOn: normalizeWeekStartsOn(session.user.weekStartsOn),
+    settingsRevision: session.user.settingsRevision ?? 1,
     agentEnabled: session.user.agentEnabled ?? true,
   };
+}
+
+function normalizeWeekStartsOn(value: number | null | undefined): 0 | 1 | 2 | 3 | 4 | 5 | 6 {
+  return Number.isInteger(value) && value !== undefined && value !== null && value >= 0 && value <= 6
+    ? value as 0 | 1 | 2 | 3 | 4 | 5 | 6
+    : 1;
 }
 
 export function handleAuthRequest(auth: TimeFriendAuth, request: FastifyRequest): Promise<Response> {

@@ -4,6 +4,7 @@ import type {
   AccountDataExport,
   AccountDeletionRecord,
   AccountPrivacyStore,
+  WeekStartsOn,
 } from "@time-friend/domain";
 
 import type { TimeFriendDatabase } from "../client.js";
@@ -108,7 +109,7 @@ export class PostgresAccountPrivacyStore implements AccountPrivacyStore {
         email: profile.email,
         name: profile.name,
         timezone: profile.timezone,
-        weekStartsOn: profile.weekStartsOn,
+        weekStartsOn: profile.weekStartsOn as WeekStartsOn,
         agentEnabled: profile.agentEnabled,
         createdAt: profile.createdAt.toISOString(),
         updatedAt: profile.updatedAt.toISOString(),

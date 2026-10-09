@@ -528,11 +528,42 @@ describe("trajectory API", () => {
 });
 
 describe("settings API", () => {
+  it("updates date preferences through an idempotent revisioned command", async () => {
+    const { app, preferences } = await setup();
+    vi.mocked(preferences.updateDateTimePreferences).mockResolvedValue({
+      userId: USER_ID,
+      timezone: "Europe/London",
+      weekStartsOn: 0,
+      revision: 2,
+      updatedAt: "2026-10-09T08:00:00.000Z",
+    });
+
+    const request = {
+      method: "PATCH" as const,
+      url: "/api/v1/settings/date-time",
+      headers: { "idempotency-key": "date-time-setting-001" },
+      payload: { timezone: "Europe/London", weekStartsOn: 0, expectedRevision: 1 },
+    };
+    const first = await app.inject(request);
+    const replay = await app.inject(request);
+
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toMatchObject({ timezone: "Europe/London", weekStartsOn: 0, revision: 2 });
+    expect(replay.json()).toEqual(first.json());
+    expect(preferences.updateDateTimePreferences).toHaveBeenCalledTimes(1);
+    expect(preferences.updateDateTimePreferences).toHaveBeenCalledWith(
+      USER_ID,
+      { timezone: "Europe/London", weekStartsOn: 0 },
+      1,
+    );
+  });
+
   it("updates Agent consent through an idempotent authenticated command", async () => {
     const { app, preferences } = await setup();
     vi.mocked(preferences.setAgentEnabled).mockResolvedValue({
       userId: USER_ID,
       agentEnabled: false,
+      revision: 2,
       updatedAt: "2026-08-22T08:00:00.000Z",
     });
 
@@ -540,7 +571,7 @@ describe("settings API", () => {
       method: "PATCH" as const,
       url: "/api/v1/settings/agent",
       headers: { "idempotency-key": "agent-setting-001" },
-      payload: { agentEnabled: false },
+      payload: { agentEnabled: false, expectedRevision: 1 },
     };
     const first = await app.inject(request);
     const replay = await app.inject(request);
@@ -549,7 +580,7 @@ describe("settings API", () => {
     expect(first.json()).toMatchObject({ userId: USER_ID, agentEnabled: false });
     expect(replay.json()).toEqual(first.json());
     expect(preferences.setAgentEnabled).toHaveBeenCalledTimes(1);
-    expect(preferences.setAgentEnabled).toHaveBeenCalledWith(USER_ID, false);
+    expect(preferences.setAgentEnabled).toHaveBeenCalledWith(USER_ID, false, 1);
   });
 });
 
@@ -640,6 +671,7 @@ async function setup(options: { authenticated?: boolean; agentEnabled?: boolean;
             name: "用户",
             timezone: "Asia/Shanghai",
             weekStartsOn: 1,
+            settingsRevision: 1,
             agentEnabled: options.agentEnabled ?? true,
           },
     idempotency: memoryIdempotency(),
@@ -650,7 +682,7 @@ async function setup(options: { authenticated?: boolean; agentEnabled?: boolean;
 }
 
 function preferenceStub(): UserPreferenceApplication {
-  return { setAgentEnabled: vi.fn() };
+  return { setAgentEnabled: vi.fn(), updateDateTimePreferences: vi.fn() };
 }
 
 function privacyStub(): AccountPrivacyApplication {

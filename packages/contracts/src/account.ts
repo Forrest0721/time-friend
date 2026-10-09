@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { isoDateTimeSchema, uuidSchema } from "./common.js";
+import { weekStartsOnSchema } from "./settings.js";
 
 export const accountDataExportSchema = z.strictObject({
   schemaVersion: z.literal("1"),
@@ -10,7 +11,7 @@ export const accountDataExportSchema = z.strictObject({
     email: z.email(),
     name: z.string(),
     timezone: z.string(),
-    weekStartsOn: z.int(),
+    weekStartsOn: weekStartsOnSchema,
     agentEnabled: z.boolean(),
     createdAt: isoDateTimeSchema,
     updatedAt: isoDateTimeSchema,

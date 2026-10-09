@@ -1,25 +1,32 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Dialog from "@radix-ui/react-dialog";
 import dynamic from "next/dynamic";
 import { v7 as uuidv7 } from "uuid";
 import {
   Bell,
+  CalendarClock,
   CalendarDays,
   CalendarRange,
   CheckSquare,
   CircleHelp,
   Clock3,
+  Download,
   Inbox,
   ListTodo,
+  LogOut,
   RefreshCw,
   Search,
   Settings,
+  ShieldCheck,
   Sparkles,
   Sun,
   Timer,
+  Trash2,
+  UserRound,
+  X,
 } from "lucide-react";
 
 import type {
@@ -29,6 +36,7 @@ import type {
   ProgressEntryDto,
   TaskGroupDto,
   TaskListDto,
+  UserDateTimePreference,
   WeeklyReviewViewDto,
 } from "@time-friend/contracts";
 
@@ -64,7 +72,15 @@ type TaskExecutionSummary = {
   recentProgress: ProgressEntryDto[];
 };
 type Bootstrap = {
-  user: { id: string; name: string; email: string; timezone: string; agentEnabled: boolean };
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    timezone: string;
+    weekStartsOn: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+    settingsRevision: number;
+    agentEnabled: boolean;
+  };
   folders: FolderDto[];
   lists: TaskListDto[];
   groups: TaskGroupDto[];
@@ -136,6 +152,8 @@ export default function ConnectedApp() {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [focusLearningNotice, setFocusLearningNotice] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<"account" | "date-time">("account");
   const [urlStateReady, setUrlStateReady] = useState(false);
   const createSyncChain = useRef<Promise<void>>(Promise.resolve());
   const queuedCreateIds = useRef(new Set<string>());
@@ -532,15 +550,53 @@ export default function ConnectedApp() {
     const enabled = !bootstrap!.user.agentEnabled;
     if (!enabled && !window.confirm("关闭后将停止自动周复盘，也不能手动生成新的 Agent 解释。已确认的轨迹与记忆仍会保留。继续吗？")) return;
     const updated = await perform(
-      () => apiMutation<{ userId: string; agentEnabled: boolean; updatedAt: string }>(
+      () => apiMutation<{ userId: string; agentEnabled: boolean; revision: number; updatedAt: string }>(
         "/api/v1/settings/agent",
         "PATCH",
-        { agentEnabled: enabled },
+        { agentEnabled: enabled, expectedRevision: bootstrap!.user.settingsRevision },
       ),
       enabled ? "Agent 分析已开启" : "Agent 分析已关闭；任务、专注和历史轨迹不受影响",
     );
     if (!updated) return;
-    setBootstrap((current) => current ? { ...current, user: { ...current.user, agentEnabled: updated.agentEnabled } } : current);
+    setBootstrap((current) => current ? {
+      ...current,
+      user: { ...current.user, agentEnabled: updated.agentEnabled, settingsRevision: updated.revision },
+    } : current);
+  }
+
+  async function updateDateTimePreferences(
+    patch: { timezone?: string; weekStartsOn?: Bootstrap["user"]["weekStartsOn"] },
+  ): Promise<boolean> {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const updated = await apiMutation<UserDateTimePreference>(
+        "/api/v1/settings/date-time",
+        "PATCH",
+        { ...patch, expectedRevision: bootstrap!.user.settingsRevision },
+      );
+      setBootstrap((current) => current ? {
+        ...current,
+        user: {
+          ...current.user,
+          timezone: updated.timezone,
+          weekStartsOn: updated.weekStartsOn,
+          settingsRevision: updated.revision,
+        },
+      } : current);
+      setMessage("日期与时间设置已保存");
+      return true;
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "REVISION_CONFLICT") {
+        setMessage("设置已在其他标签页更新，已加载最新值");
+        await loadBootstrap();
+      } else {
+        setMessage(errorMessage(error));
+      }
+      return false;
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function exportAccountData() {
@@ -554,9 +610,7 @@ export default function ConnectedApp() {
     URL.revokeObjectURL(url);
   }
 
-  async function deleteAccount() {
-    const confirmation = window.prompt("此操作会撤销登录并永久删除任务、专注、轨迹和长期记忆。请输入 DELETE 确认：")?.trim();
-    if (confirmation !== "DELETE") return;
+  async function deleteAccount(): Promise<boolean> {
     const accepted = await perform(
       () => apiMutation<{ id: string; status: string }>("/api/v1/account", "DELETE", { confirmation: "DELETE" }),
       "账户已冻结，删除任务正在执行",
@@ -565,13 +619,20 @@ export default function ConnectedApp() {
       await clientPersistence.destroy();
       window.setTimeout(() => location.reload(), 1_200);
     }
+    return accepted !== null;
+  }
+
+  async function signOut() {
+    await apiRequest("/api/auth/sign-out", { method: "POST" });
+    await clientPersistence.destroy();
+    location.reload();
   }
 
   return (
     <main className={`connected-shell connected-view-${view}`} aria-busy={busy}>
       <aside className="dida-app-rail connected-app-rail" aria-label="应用导航">
-        <button className="dida-avatar" aria-label="账户">{initials(bootstrap.user.name)}</button>
-        <nav>
+        <button className="dida-avatar" aria-label="账户" onClick={() => { setSettingsTab("account"); setSettingsOpen(true); }}>{initials(bootstrap.user.name)}</button>
+        <nav aria-label="主导航">
           <button className={view === "tasks" ? "active" : ""} onClick={() => setView("tasks")} aria-label="任务"><CheckSquare /></button>
           <button onClick={() => setView("tasks")} aria-label="日历"><CalendarDays /></button>
           <button className={view === "focus" ? "active" : ""} onClick={() => setView("focus")} aria-label="专注"><Timer /></button>
@@ -581,7 +642,7 @@ export default function ConnectedApp() {
         <div className="dida-rail-bottom">
           <button aria-label="同步"><RefreshCw /></button>
           <button aria-label="通知"><Bell /></button>
-          <button aria-label="设置"><Settings /></button>
+          <button aria-label="设置" onClick={() => { setSettingsTab("account"); setSettingsOpen(true); }}><Settings /></button>
           <button aria-label="帮助"><CircleHelp /></button>
         </div>
       </aside>
@@ -614,7 +675,7 @@ export default function ConnectedApp() {
           ))}
           <button className="connected-add-list" onClick={() => createOrganization("list")}>＋ 新清单</button>
         </div>
-        <div className="connected-account"><span>{initials(bootstrap.user.name)}</span><div><b>{bootstrap.user.name}</b><small>{bootstrap.user.email}</small></div><p><button className={bootstrap.user.agentEnabled ? "agent-on" : ""} onClick={toggleAgent}>{bootstrap.user.agentEnabled ? "Agent 开" : "Agent 关"}</button><button onClick={exportAccountData}>导出</button><button onClick={() => void apiRequest("/api/auth/sign-out", { method: "POST" }).then(() => location.reload())}>退出</button><button className="delete-account" onClick={deleteAccount}>删号</button></p></div>
+        <div className="connected-account"><span>{initials(bootstrap.user.name)}</span><div><b>{bootstrap.user.name}</b><small>{bootstrap.user.email}</small></div><p><button className={bootstrap.user.agentEnabled ? "agent-on" : ""} onClick={toggleAgent}>{bootstrap.user.agentEnabled ? "Agent 开" : "Agent 关"}</button><button onClick={() => { setSettingsTab("account"); setSettingsOpen(true); }}>设置</button></p></div>
       </aside>}
 
       <section className="connected-workspace">
@@ -664,8 +725,165 @@ export default function ConnectedApp() {
         )}
         {view === "trajectory" && <TrajectoryWorkspace items={bootstrap.items} currentCommitments={currentCommitments} agentEnabled={bootstrap.user.agentEnabled} onToggleAgent={toggleAgent} perform={perform} />}
       </section>
+      <SettingsDialog
+        open={settingsOpen}
+        tab={settingsTab}
+        user={bootstrap.user}
+        busy={busy}
+        onOpenChange={setSettingsOpen}
+        onTabChange={setSettingsTab}
+        onUpdateDateTime={updateDateTimePreferences}
+        onExport={exportAccountData}
+        onSignOut={signOut}
+        onDeleteAccount={deleteAccount}
+      />
     </main>
   );
+}
+
+function SettingsDialog({ open, tab, user, busy, onOpenChange, onTabChange, onUpdateDateTime, onExport, onSignOut, onDeleteAccount }: {
+  open: boolean;
+  tab: "account" | "date-time";
+  user: Bootstrap["user"];
+  busy: boolean;
+  onOpenChange(open: boolean): void;
+  onTabChange(tab: "account" | "date-time"): void;
+  onUpdateDateTime(patch: { timezone?: string; weekStartsOn?: Bootstrap["user"]["weekStartsOn"] }): Promise<boolean>;
+  onExport(): Promise<void>;
+  onSignOut(): Promise<void>;
+  onDeleteAccount(): Promise<boolean>;
+}) {
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const timezones = supportedTimeZones(user.timezone);
+
+  return <Dialog.Root open={open} onOpenChange={onOpenChange}>
+    <Dialog.Portal>
+      <Dialog.Overlay className="connected-settings-backdrop" />
+      <Dialog.Content className="connected-settings-dialog" aria-busy={busy}>
+        <aside className="connected-settings-navigation">
+          <Dialog.Title>设置</Dialog.Title>
+          <nav aria-label="设置分类">
+            <button className={tab === "account" ? "active" : ""} onClick={() => onTabChange("account")}><UserRound />账户与安全</button>
+            <button className={tab === "date-time" ? "active" : ""} onClick={() => onTabChange("date-time")}><CalendarClock />日期与时间</button>
+          </nav>
+          <p>只展示已经可用的设置；新模块上线后再加入这里。</p>
+        </aside>
+        <section className="connected-settings-content">
+          <Dialog.Close className="connected-settings-close" aria-label="关闭设置"><X /></Dialog.Close>
+          {tab === "account" ? <>
+            <header><span className="connected-settings-avatar">{initials(user.name)}</span><div><h2>{user.name}</h2><p>{user.email}</p></div></header>
+            <SettingsGroup title="账户">
+              <SettingsRow label="邮箱"><span>{user.email}</span></SettingsRow>
+              <SettingsRow label="当前时区"><span>{user.timezone}</span></SettingsRow>
+            </SettingsGroup>
+            <SettingsGroup title="数据与会话">
+              <SettingsRow label="导出个人数据" detail="下载可移植的 JSON 备份。"><button onClick={() => void onExport()} disabled={busy}><Download />导出</button></SettingsRow>
+              <SettingsRow label="退出当前设备"><button onClick={() => void onSignOut()} disabled={busy}><LogOut />退出</button></SettingsRow>
+            </SettingsGroup>
+            <section className="connected-settings-danger">
+              <div><h3>删除账号</h3><p>立即撤销会话，并在后台永久删除任务、专注、轨迹和长期记忆。</p></div>
+              <button onClick={() => setDeleteOpen(true)} disabled={busy}><Trash2 />删除账号</button>
+            </section>
+          </> : <>
+            <header><div><h2>日期与时间</h2><p>这些值决定“今天”和周期统计如何归属。</p></div></header>
+            <SettingsGroup title="本地日期">
+              <SettingsRow label="时区" detail="使用 IANA 时区；跨夏令时仍能正确计算本地日期。">
+                <select
+                  aria-label="时区"
+                  value={user.timezone}
+                  disabled={busy}
+                  onChange={(event) => void onUpdateDateTime({ timezone: event.target.value })}
+                >
+                  {timezones.map((timezone) => <option key={timezone} value={timezone}>{timezone}</option>)}
+                </select>
+              </SettingsRow>
+              <SettingsRow label="每周开始于" detail="用于周视图、周统计与未来习惯排程。">
+                <select
+                  aria-label="每周开始于"
+                  value={user.weekStartsOn}
+                  disabled={busy}
+                  onChange={(event) => void onUpdateDateTime({ weekStartsOn: Number(event.target.value) as Bootstrap["user"]["weekStartsOn"] })}
+                >
+                  {weekStartOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </SettingsRow>
+            </SettingsGroup>
+            <p className="connected-settings-note"><ShieldCheck />修改会即时保存。若另一标签页先更新，检测冲突时会加载最新值而不是覆盖。</p>
+          </>}
+        </section>
+        <DeleteAccountDialog open={deleteOpen} busy={busy} onOpenChange={setDeleteOpen} onConfirm={onDeleteAccount} />
+      </Dialog.Content>
+    </Dialog.Portal>
+  </Dialog.Root>;
+}
+
+function SettingsGroup({ title, children }: { title: string; children: ReactNode }) {
+  return <section className="connected-settings-group"><h3>{title}</h3><div>{children}</div></section>;
+}
+
+function SettingsRow({ label, detail, children }: { label: string; detail?: string; children: ReactNode }) {
+  return <div className="connected-settings-row"><div><b>{label}</b>{detail && <small>{detail}</small>}</div><div>{children}</div></div>;
+}
+
+function DeleteAccountDialog({ open, busy, onOpenChange, onConfirm }: {
+  open: boolean;
+  busy: boolean;
+  onOpenChange(open: boolean): void;
+  onConfirm(): Promise<boolean>;
+}) {
+  const [confirmation, setConfirmation] = useState("");
+  const [acknowledged, setAcknowledged] = useState(false);
+  const ready = confirmation === "DELETE" && acknowledged && !busy;
+
+  async function confirmDeletion() {
+    if (!ready) return;
+    if (await onConfirm()) onOpenChange(false);
+  }
+
+  return <Dialog.Root open={open} onOpenChange={(next) => {
+    onOpenChange(next);
+    if (!next) {
+      setConfirmation("");
+      setAcknowledged(false);
+    }
+  }}>
+    <Dialog.Portal>
+      <Dialog.Overlay className="connected-delete-backdrop" />
+      <Dialog.Content className="connected-delete-dialog">
+        <Dialog.Title>删除账号</Dialog.Title>
+        <Dialog.Description>此操作会立即退出所有会话，并永久删除全部个人数据。操作开始后无法撤销。</Dialog.Description>
+        <label>输入 <code>DELETE</code> 确认<input type="text" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" /></label>
+        <label className="connected-delete-ack"><input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} />我理解全部任务、专注、轨迹与长期记忆都会被删除。</label>
+        <footer><Dialog.Close>取消</Dialog.Close><button className="danger" disabled={!ready} onClick={() => void confirmDeletion()}>确认删除</button></footer>
+      </Dialog.Content>
+    </Dialog.Portal>
+  </Dialog.Root>;
+}
+
+const weekStartOptions: ReadonlyArray<{ value: Bootstrap["user"]["weekStartsOn"]; label: string }> = [
+  { value: 0, label: "周日" },
+  { value: 1, label: "周一" },
+  { value: 2, label: "周二" },
+  { value: 3, label: "周三" },
+  { value: 4, label: "周四" },
+  { value: 5, label: "周五" },
+  { value: 6, label: "周六" },
+];
+
+export function supportedTimeZones(current: string): string[] {
+  const intl = Intl as typeof Intl & { supportedValuesOf?: (key: "timeZone") => string[] };
+  const values = intl.supportedValuesOf?.("timeZone") ?? [
+    "Asia/Shanghai",
+    "Asia/Hong_Kong",
+    "Asia/Tokyo",
+    "Europe/London",
+    "Europe/Paris",
+    "America/New_York",
+    "America/Los_Angeles",
+    "Australia/Sydney",
+    "UTC",
+  ];
+  return [...new Set([current, "UTC", ...values])].sort((left, right) => left.localeCompare(right));
 }
 
 function TaskWorkspace({ data, selectedListId, selectedItem, onSelectItem, onCreate, commitments, focusLearningNotice, onDismissFocusLearning, pendingItems, onRetryCreate, onTransition, onCommandTask, onSave, onStartFocus, onMove, onReorderItems, onCreateGroup, onUpdateOrganization, onReorderOrganization, onReload, perform }: {

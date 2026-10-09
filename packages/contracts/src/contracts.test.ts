@@ -7,6 +7,7 @@ import {
   focusFeedbackBodySchema,
   moveItemBodySchema,
   reorderItemsBodySchema,
+  updateDateTimePreferenceBodySchema,
   updateItemBodySchema,
   updateTaskListBodySchema,
 } from "./index.js";
@@ -38,6 +39,15 @@ describe("task API contracts", () => {
   it("requires optimistic revisions for every update", () => {
     expect(() => updateTaskListBodySchema.parse({ name: "新名称" })).toThrow();
     expect(updateTaskListBodySchema.parse({ name: "新名称", expectedRevision: 1 })).toMatchObject({ expectedRevision: 1 });
+  });
+
+  it("accepts every weekday as a week start and requires an actual change", () => {
+    for (let weekStartsOn = 0; weekStartsOn <= 6; weekStartsOn += 1) {
+      expect(updateDateTimePreferenceBodySchema.parse({ weekStartsOn, expectedRevision: 1 }))
+        .toMatchObject({ weekStartsOn });
+    }
+    expect(() => updateDateTimePreferenceBodySchema.parse({ weekStartsOn: 7, expectedRevision: 1 })).toThrow();
+    expect(() => updateDateTimePreferenceBodySchema.parse({ expectedRevision: 1 })).toThrow();
   });
 
   it("strictly rejects unknown high-risk fields", () => {

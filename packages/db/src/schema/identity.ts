@@ -1,4 +1,4 @@
-import { boolean, check, foreignKey, index, pgTable, smallint, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, foreignKey, index, integer, pgTable, smallint, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 import { createdAtColumn, updatedAtColumn } from "./common.js";
@@ -13,6 +13,7 @@ export const users = pgTable(
     image: text("image"),
     timezone: text("timezone").notNull().default("Asia/Shanghai"),
     weekStartsOn: smallint("week_starts_on").notNull().default(1),
+    settingsRevision: integer("settings_revision").notNull().default(1),
     agentEnabled: boolean("agent_enabled").notNull().default(true),
     frozenAt: timestamp("frozen_at", { withTimezone: true, mode: "date" }),
     createdAt: createdAtColumn(),
@@ -20,7 +21,8 @@ export const users = pgTable(
   },
   (table) => [
     uniqueIndex("users_email_unique").on(table.email),
-    check("users_week_starts_on_monday", sql`${table.weekStartsOn} = 1`),
+    check("users_week_starts_on_range", sql`${table.weekStartsOn} BETWEEN 0 AND 6`),
+    check("users_settings_revision_positive", sql`${table.settingsRevision} > 0`),
   ],
 );
 

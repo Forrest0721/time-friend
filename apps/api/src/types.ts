@@ -23,7 +23,8 @@ export interface AuthenticatedUser {
   email: string;
   name: string;
   timezone: string;
-  weekStartsOn: 1;
+  weekStartsOn: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+  settingsRevision: number;
   agentEnabled: boolean;
 }
 
@@ -105,7 +106,7 @@ export type TrajectoryFeedbackApplication = Pick<
   | "updateCommitment"
   | "setCommitmentStatus"
 >;
-export type UserPreferenceApplication = Pick<UserPreferenceService, "setAgentEnabled">;
+export type UserPreferenceApplication = Pick<UserPreferenceService, "setAgentEnabled" | "updateDateTimePreferences">;
 export type AccountPrivacyApplication = Pick<AccountPrivacyService, "exportData" | "requestDeletion">;
 
 export interface IdempotentResult<T> {

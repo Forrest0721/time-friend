@@ -144,7 +144,13 @@ describe("Better Auth integration", () => {
 
     expect(bootstrap.statusCode).toBe(200);
     expect(bootstrap.json()).toMatchObject({
-      user: { email: "new-user@example.com", timezone: "Asia/Shanghai", weekStartsOn: 1, agentEnabled: true },
+      user: {
+        email: "new-user@example.com",
+        timezone: "Asia/Shanghai",
+        weekStartsOn: 1,
+        settingsRevision: 1,
+        agentEnabled: true,
+      },
       lists: [{ name: "收集箱", isInbox: true, folderId: null }],
     });
   });

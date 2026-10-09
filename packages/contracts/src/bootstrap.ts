@@ -4,6 +4,7 @@ import { uuidSchema } from "./common.js";
 import { focusSessionViewSchema } from "./execution.js";
 import { itemSchema } from "./items.js";
 import { folderSchema, taskGroupSchema, taskListSchema } from "./organization.js";
+import { weekStartsOnSchema } from "./settings.js";
 
 export const bootstrapSchema = z.strictObject({
   user: z.strictObject({
@@ -11,7 +12,8 @@ export const bootstrapSchema = z.strictObject({
     email: z.email(),
     name: z.string(),
     timezone: z.string(),
-    weekStartsOn: z.literal(1),
+    weekStartsOn: weekStartsOnSchema,
+    settingsRevision: z.int().positive(),
     agentEnabled: z.boolean(),
   }),
   folders: z.array(folderSchema),

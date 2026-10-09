@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDuration, optimisticItemFrom, optimisticTaskTransition } from "./connected-app";
+import { formatDuration, optimisticItemFrom, optimisticTaskTransition, supportedTimeZones } from "./connected-app";
 import type { CreateItemOutboxEntry } from "./client-db";
 import { contentDocumentToText, textToContentDocument } from "./content-document";
 
@@ -30,6 +30,15 @@ describe("connected app content helpers", () => {
     expect(formatDuration(-1)).toBe("00:00");
     expect(formatDuration(125)).toBe("02:05");
     expect(formatDuration(3_725)).toBe("1h 02m");
+  });
+
+  it("keeps an existing IANA timezone available without duplicating it", () => {
+    const values = supportedTimeZones("Asia/Shanghai");
+
+    expect(values).toContain("Asia/Shanghai");
+    expect(values).toContain("UTC");
+    expect(values.filter((value) => value === "Asia/Shanghai")).toHaveLength(1);
+    expect(values).toEqual([...values].sort((left, right) => left.localeCompare(right)));
   });
 
   it("creates a contract-shaped optimistic task without inventing server state", () => {

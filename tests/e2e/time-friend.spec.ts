@@ -96,6 +96,25 @@ test("Agent 关闭时事实、任务和专注仍可用，且不会提供生成�
   await expect(page.getByText("保留真实行动", { exact: true })).toBeVisible();
 });
 
+test("日期与时间设置即时保存，并在关闭弹窗后保留任务上下文", async ({ context, page }) => {
+  const api = await installMockApi(context, { items: [itemFixture(TASK_ID, "设置前正在编辑")] });
+  await page.goto("/");
+  await page.getByText("设置前正在编辑", { exact: true }).click();
+
+  await page.getByLabel("设置", { exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "设置" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "日期与时间" }).click();
+  await expect(dialog.getByLabel("时区")).toHaveValue("Asia/Shanghai");
+  await dialog.getByLabel("每周开始于").selectOption("0");
+
+  await expect(page.locator(".connected-message[role='status']")).toContainText("日期与时间设置已保存");
+  expect(api.dateTimeBodies).toEqual([{ weekStartsOn: 0, expectedRevision: 1 }]);
+  expect(api.settingsRevision).toBe(2);
+  await dialog.getByLabel("关闭设置").click();
+  await expect(page.locator(".connected-detail .connected-title-input")).toHaveValue("设置前正在编辑");
+});
+
 test("已有清单可以移入文件夹，并在重新加载组织数据后显示在文件夹内", async ({ context, page }) => {
   const api = await installMockApi(context, {
     folders: [folderFixture(FOLDER_ID, "工作")],
@@ -207,6 +226,10 @@ async function installMockApi(context: BrowserContext, options: MockOptions = {}
     currentCommitments: [] as ReturnType<typeof commitmentFixture>[],
     correctionKinds: [] as string[],
     confirmedReviews: 0,
+    timezone: "Asia/Shanghai",
+    weekStartsOn: 1 as 0 | 1 | 2 | 3 | 4 | 5 | 6,
+    settingsRevision: 1,
+    dateTimeBodies: [] as Array<{ timezone?: string; weekStartsOn?: number; expectedRevision: number }>,
   };
   await context.route(`${API_ORIGIN}/**`, async (route) => {
     const request = route.request();
@@ -214,9 +237,33 @@ async function installMockApi(context: BrowserContext, options: MockOptions = {}
     const path = url.pathname;
     const method = request.method();
     if (path === "/api/auth/get-session") return json(route, { user: { id: USER_ID } });
-    if (path === "/api/v1/bootstrap") return json(route, bootstrapFixture(state.folders, state.lists, state.items, state.activeFocus, options.agentEnabled ?? true));
+    if (path === "/api/v1/bootstrap") return json(route, bootstrapFixture(
+      state.folders,
+      state.lists,
+      state.items,
+      state.activeFocus,
+      options.agentEnabled ?? true,
+      { timezone: state.timezone, weekStartsOn: state.weekStartsOn, settingsRevision: state.settingsRevision },
+    ));
     if (path === "/api/v1/commitments/current") return json(route, { items: state.currentCommitments });
     if (path === "/api/v1/telemetry/events") return route.fulfill({ status: 204 });
+    if (path === "/api/v1/settings/date-time" && method === "PATCH") {
+      const body = request.postDataJSON() as { timezone?: string; weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6; expectedRevision: number };
+      state.dateTimeBodies.push(body);
+      if (body.expectedRevision !== state.settingsRevision) {
+        return json(route, { code: "REVISION_CONFLICT", title: "设置已被其他请求更新" }, 409);
+      }
+      if (body.timezone !== undefined) state.timezone = body.timezone;
+      if (body.weekStartsOn !== undefined) state.weekStartsOn = body.weekStartsOn;
+      state.settingsRevision += 1;
+      return json(route, {
+        userId: USER_ID,
+        timezone: state.timezone,
+        weekStartsOn: state.weekStartsOn,
+        revision: state.settingsRevision,
+        updatedAt: new Date().toISOString(),
+      });
+    }
     if (path === "/api/v1/items" && method === "POST") {
       const body = request.postDataJSON() as { id: string; title: string; kind: "task" | "note"; listId: string; plannedOn?: string | null; priority?: "none" | "low" | "medium" | "high" | null };
       state.createIdempotencyKeys.push(request.headers()["idempotency-key"] ?? "");
@@ -314,9 +361,10 @@ function bootstrapFixture(
   items: ReturnType<typeof itemFixture>[],
   activeFocus: ReturnType<typeof focusView> | null,
   agentEnabled: boolean,
+  settings: { timezone: string; weekStartsOn: 0 | 1 | 2 | 3 | 4 | 5 | 6; settingsRevision: number },
 ) {
   return {
-    user: { id: USER_ID, email: "forrest@example.com", name: "Forrest", timezone: "Asia/Shanghai", weekStartsOn: 1, agentEnabled },
+    user: { id: USER_ID, email: "forrest@example.com", name: "Forrest", ...settings, agentEnabled },
     folders,
     lists,
     groups: [],
